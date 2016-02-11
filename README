@@ -107,12 +107,14 @@ Description:
 '-m' Allows to override the default state message 'u'. In the kernel case, the
 script will attempt to determine if the patch is from a public repo and will
 mark it accordingly.
-'-M' will replace the default (according to the state set with '-m') state string.
-'-r' allows to add a 'Reference:' string. It should contain a bug and/or FATE ID.
+'-M' will replace the default (according to the state set with '-m') state
+string.
+'-r' allows to add a 'Reference:' string. It should contain a bug and/or
+FATE ID.
 '-d' allows to specify a directory where the patches should be placed.
 '-v' displays the list of patch files generated.
-<range> allows to specify the list of patches. This can be either a list of <id>,
-or <id1>..<id2>, ..<id2>, <id1>.. or a mixture thereof.
+<range> allows to specify the list of patches. This can be either a list of
+<id>, or <id1>..<id2>, ..<id2>, <id1>.. or a mixture thereof.
 
 TODO:
 An 'upstream' should be added for X11:XOrg flavored patches as well. The '-m'
