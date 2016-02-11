@@ -1,0 +1,492 @@
+#!/bin/bash
+#
+# Installs/deletes a kernel
+#
+#
+
+#set -x
+
+function die() {
+    echo "$1" >&2
+    exit 1
+}
+
+function remotecp()                                                        # {{{
+{
+    SOURCE=$1
+    TARGET=$2
+
+    echo scp -C "$SOURCE" "root@$REMOTEHOST:$TARGET"
+    scp -C "$SOURCE" "root@$REMOTEHOST:$TARGET"
+}                                                                          # }}}
+
+function remoterm()                                                        # {{{
+{
+    FILE=$1
+
+    ssh -C root@$REMOTEHOST rm -fr $FILE
+}                                                                          # }}}
+
+if [ -e $HOME/.myconfig ]
+then
+    . $HOME/.myconfig
+else
+    die "No file $HOME/.myconfig found."
+fi
+
+[ -z "$MODULETMPDIR" ] && MODULETMPDIR=$TMPDIR
+
+bootloader=0
+nomodule=
+dont_ask=0
+lilo=0
+strip=0
+initrd=1
+inst_arch=""
+inst_orig=""
+orig=""
+IMAGE="vmlinuz"
+modules_to_install=""
+
+while getopts nbhflsio:m:a:j: name ; do
+    case $name in
+	m)
+	    modules_to_install="$modules_to_install $OPTARG"
+	    ;;
+        f)
+            dont_ask=1
+            ;;
+        n)
+            nomodule=1
+            ;;
+        b)
+            bootloader=1
+            ;;
+        i)
+            initrd=0
+            nomodule=1
+            ;;
+        l)
+            lilo=1
+            ;;
+	s)
+	    strip=1
+	    ;;
+	a)
+	    inst_arch="ARCH=$OPTARG"
+	    echo "Installing for architecture: $OPTARG"
+	    arch="$OPTARG"
+	    ;;
+	j)
+	    par="$OPTARG"
+	    echo "Using $par processes"
+	    ;;
+	o)
+	    echo "Using files from: $OPTARG"
+	    inst_orig="O=$OPTARG"
+	    orig="$OPTARG/"
+	    ;;
+        h|?)
+            echo "Usage     installkernel [-o <builddir>] [-a <arch>] [-l] [-f] [-i] [-n] [-s] [-j <n>] [hostname]"
+	    echo "          installkernel [-o <builddir>] [-a <arch>] [-i] [-s] -m \"module_list\" [hostname]"
+            echo "          removekernel [-l] [-n] [-f] [-i] [<version>] [hostname]"
+            echo
+            echo "Options"
+            echo "   -n:  nomodule"
+            echo "   -a <arch>:  architecture(x86_64/i386)"
+            echo "   -o <build_dir>:  location of build files (O=... kernel option)"	    
+            echo "   -b:  edit bootloader configuration manually"
+	    echo "   -f:  don't ask (doesn't update bootloader)"
+	    echo "   -i:  don't update bootloader/initrd"
+	    echo "   -m:  modules to install"
+	    echo "   -j <n>: parallelize actions that can be parallelized"
+	    echo "   -l:  use lilo"  
+	    echo "   -s:  strip kernel/modules"
+            exit 1
+    esac
+done
+shift $(($OPTIND -1))
+
+PROG=$(basename $0)
+if [ $PROG = "installkernel" ] ; then
+    REMOTEHOST="$1"
+    if [ -n "$modules_to_install" ]
+    then
+	MAIN=do_installmodules
+    else
+	MAIN=do_installkernel
+    fi
+elif [ $PROG = "removekernel" ] ; then
+    if [ $# -eq 1 ]
+    then
+	REMOTEHOST="$1"
+    else
+	VERSION="$1"
+	REMOTEHOST="$2"
+    fi
+    MAIN=do_removekernel
+else
+    echo "Script was called with invalid \$0: $0"
+    exit 1
+fi
+
+if [ -z "$REMOTEHOST" ];then
+    arch=$(uname -m) || exit 1
+else
+    arch=$(ssh root@$REMOTEHOST uname -m) \
+	|| die "Cannot log in to root@$REMOTEHOST"
+fi
+
+case $arch in 
+    x86_64)
+	if [ -r ${orig}arch/$(uname -m)/boot/bzImage ]; then
+	    COPYIMAGE=${orig}arch/$(uname -m)/boot/bzImage
+	elif [ -r ${orig}arch/x86/boot/bzImage ]; then
+	    COPYIMAGE=${orig}arch/x86/boot/bzImage
+	elif [ -r ${orig}arch/x86/boot/vmlinuz ]; then
+	    COPYIMAGE=${orig}arch/x86/boot/vmlinuz
+	else
+	    echo "Cannot find bzImage"
+	    exit 1
+	fi
+        BOOTCONFIG=/boot/grub/menu.lst
+        IMAGE=vmlinuz
+        if (( $lilo )) ; then
+            LOADER=lilo
+        else
+            LOADER=grub
+        fi
+        ;;
+    i386|i586|i686)
+	if [ -r ${orig}arch/i386/boot/bzImage ];then
+            COPYIMAGE=${orig}arch/i386/boot/bzImage
+	elif [ -r ${orig}arch/x86/boot/bzImage ];then
+	    COPYIMAGE=${orig}arch/x86/boot/bzImage
+	else
+	    echo "Cannot find bzImage"
+	    exit 1
+	fi
+
+        BOOTCONFIG=/boot/grub/menu.lst
+        IMAGE=vmlinuz
+        LOADER=grub
+        ;;
+
+    ppc64)
+        COPYIMAGE=none
+        BOOTCONFIG=/etc/lilo.conf
+        IMAGE=vmlinux
+        LOADER=lilo
+        ;;
+
+    ia64)
+        COPYIMAGE=${orig}vmlinuz
+        BOOTCONFIG=/etc/elilo.conf
+        IMAGE=vmlinuz
+        LOADER=elilo
+	;;
+    arm*)
+	if [ -r ${orig}arch/arm/boot/uImage ]; then
+	    COPYIMAGE=${orig}arch/arm/boot/uImage
+	fi
+	COPYIMAGE=${orig}arch/arm/boot/uImage
+        BOOTCONFIG=none
+	IMAGE=uImage
+        LOADER=u-boot
+esac
+
+# we need sudo only when we install the kernel on the local system
+if [ "$UID" != 0 -a -z "$REMOTEHOST" ] ; then
+    SUDO=sudo
+else
+    SUDO=
+fi
+
+if [ -n "$REMOTEHOST" ] ; then
+    MODULEINSTALLDIR=$MODULETMPDIR
+    COPYCMD=remotecp
+    CMD="ssh root@$REMOTEHOST"
+    CMDT="ssh -t root@$REMOTEHOST"
+    RMCMD=remoterm
+    EXECSHELL="ssh -T root@$REMOTEHOST"
+    ROOTEXECSHELL="ssh -T root@$REMOTEHOST"
+else
+    COPYCMD=cp
+    MODULEINSTALLDIR=
+    CMD=
+    CMDT=
+    RMCMD="rm -fr"
+    EXECSHELL="sh"
+    ROOTEXECSHELL="sudo sh"
+fi
+
+function add_bootloader()                                                  # {{{
+{
+    local initrd_line=
+
+    if (( $initrd )) ; then
+        initrd_line="--initrd /boot/initrd-$VERSION"
+    fi
+    $ROOTEXECSHELL <<EOF
+        if ! grep -q "/boot/${IMAGE}-${VERSION}" $BOOTCONFIG ; then
+            /sbin/update-bootloader --add \
+                --image /boot/$IMAGE-$VERSION $initrd_line
+        fi
+        /sbin/update-bootloader --refresh
+EOF
+}                                                                          # }}}
+
+function remove_bootloader()                                               # {{{
+{
+    local initrd_line=
+
+    if (( $initrd )) ; then
+        initrd_line="--initrd /boot/initrd-$VERSION"
+    fi
+
+    $ROOTEXECSHELL <<EOF
+        /sbin/update-bootloader --remove \
+            --image /boot/$IMAGE-$VERSION $initrd_line --force
+        /sbin/update-bootloader --refresh
+EOF
+}                                                                          # }}}
+
+editbootloaderconfig()                                                     # {{{
+{
+    if (( $dont_ask )) ; then
+        return
+    fi
+    [ -z "$EDITOR" ] && EDITOR=vim
+
+    echo "Do you want to edit bootloader configuration? [y/N] "
+    read answer
+    if [ "$answer" == "y" ] ; then
+        $SUDO $CMDT $EDITOR $BOOTCONFIG
+    fi
+
+    if [ "$LOADER" = "lilo" -o "$LOADER" = "elilo" ] ; then
+        echo "Running $LOADER ..."
+        $SUDO $CMD /sbin/$LOADER
+    fi
+}                                                                          # }}}
+
+find_version()
+{
+    local kernel
+
+    if [ ! -f ${orig}vmlinux ] ; then
+        echo "Wrong directory, there must be a file called 'vmlinux'"
+        exit 1
+    fi
+    if [ -e ${orig}vmlinux ]; then
+	kernel=${orig}vmlinux
+    elif [ -e ${orig}vmlinuz ]; then
+	kernel=${orig}vmlinuz
+    else
+	return
+    fi
+
+    if [ -x /sbin/get_kernel_version ] ; then
+        VERSION="$(/sbin/get_kernel_version ${kernel})"
+    elif [ -x /usr/bin/get_kernel_version ]; then
+        VERSION="$(/usr/bin/get_kernel_version ${kernel})"
+    fi
+    if test -z "$VERSION" || echo "$VERSION" |grep invalid; then
+	VERSION=$(make $inst_arch $inst_orig kernelrelease)
+    fi
+
+    echo $VERSION
+}
+
+make_initrd()
+{
+    if (( $initrd )) ; then
+        echo "Making initrd"
+        echo $SUDO $CMD /sbin/mkinitrd -k /boot/$IMAGE-$VERSION -i /boot/initrd-$VERSION -M /boot/System.map-$VERSION
+        $SUDO $CMD /sbin/mkinitrd -k /boot/$IMAGE-$VERSION -i /boot/initrd-$VERSION  -M /boot/System.map-$VERSION
+    fi
+}
+
+do_installmodules()
+{
+    VERSION=$(find_version)
+    ALTVERSION=${VERSION%+}
+    [ "$ALTVERSION" = "$VERSION" ] && unset ALTVERSION
+    if [ "$REMOTEHOST"x = "x" ]
+    then
+	if [ ! -d /lib/modules/$VERSION ]
+	then
+	    if [ -n "$ALTVERSION" ]
+	    then
+		if [ -d /lib/modules/$ALTVERSION ]
+		then
+		    die "Cannot install $modules_to_install: /lib/modules/$VERSION or /lib/modules/$ALTVERSION doesn't exist"
+		else
+		    VERSION=$ALTVERSION
+		fi
+	    else
+		die "Cannot install $modules_to_install: /lib/modules/$VERSION doesn't exist"
+	    fi
+	fi
+    else
+	if $SUDO $CMD test ! -d /lib/modules/$VERSION
+	then
+	    if [ -n "$ALTVERSION" ]
+	    then
+		if  $SUDO $CMD test ! -d /lib/modules/$ALTVERSION
+		then
+		    die "Cannot install $modules_to_install on $REMOTEHOST: /lib/modules/$VERSION or /lib/modules/$ALTVERSION doesn't exist"
+		else
+		    VERSION=$ALTVERSION
+		fi
+	    else
+		die "Cannot install $modules_to_install on $REMOTEHOST: /lib/modules/$VERSION doesn't exist"
+	    fi
+	fi
+    fi
+    for i in $modules_to_install
+    do
+	echo "Installing $i"
+	if [ $strip -eq 1 ] 
+	then
+	    copy=${orig}$i.strip
+	    cp ${orig}$i $copy
+	    strip --strip-debug $copy
+	else
+	    copy=${orig}$i
+	fi
+	echo $SUDO $COPYCMD $copy /lib/modules/$VERSION/kernel/$i
+	targetdir=$(dirname /lib/modules/$VERSION/kernel/$i)
+	$ROOTEXECSHELL mkdir -p $targetdir
+	$SUDO $COPYCMD $copy /lib/modules/$VERSION/kernel/$i
+	[ "$copy" != "${orig}$i" ] && rm $copy
+    done
+    if [ $initrd -eq 1 ]
+    then
+	make_initrd
+    fi
+}
+
+do_installkernel()                                                         # {{{
+{
+    if [ "$COPYIMAGE" = "${orig}vmlinuz" ] ; then
+        if [ -f "${orig}vmlinux.gz" ] ; then
+            mv ${orig}vmlinux.gz ${orig}vmlinuz
+        else
+            gzip -c9 ${orig}vmlinux > ${orig}vmlinuz
+        fi
+    fi
+
+    VERSION=$(find_version)
+
+    # only local check is ok here
+    if (( !$dont_ask )) ; then
+        if [ "$REMOTEHOST"x = "x" -a -f /boot/vmlinuz-$VERSION ] ; then
+            echo "Kernel of $VERSION already exists, overwrite? [Y/n]"
+            read answer
+            if [ "$answer" == "n" ] ; then
+                exit 0
+            fi
+        else
+            echo "Warning: Installing the kernel on the remote host, don't check if it exists!"
+        fi
+    fi
+    if [ $strip -eq 1 ]
+    then
+	echo "Stripping, compressing vmlinux and copying to /boot/vmlinux-$VERSION.gz"
+	tmpfile=$(mktemp ${orig}tmp.XXXXXXXX) || die "cannot create tempfile"
+	cp ${orig}vmlinux $tmpfile
+	strip --strip-debug $tmpfile
+	gzip -9  $tmpfile
+	$SUDO $COPYCMD $tmpfile.gz /boot/vmlinux-$VERSION.gz
+	rm ${orig}tmpfile.gz
+    else
+	echo "Copying vmlinux to /boot/vmlinux-$VERSION"
+	$SUDO $COPYCMD ${orig}vmlinux /boot/vmlinux-$VERSION
+    fi
+
+    echo FOO $COPYIMAGE
+    if [ -r "$COPYIMAGE" ] ; then
+        echo "Copying $COPYIMAGE to /boot/$IMAGE-$VERSION"
+        $SUDO $COPYCMD $COPYIMAGE /boot/$IMAGE-$VERSION
+    fi
+    echo "Copy System.map to /boot/System.map-$VERSION"
+    $SUDO $COPYCMD ${orig}System.map /boot/System.map-$VERSION
+    
+    echo "Copy config to /boot/config-$VERSION"
+    $SUDO $COPYCMD ${orig}.config /boot/config-$VERSION
+
+    if [ -z "$nomodule" ] ; then
+        echo "Installing modules"
+        if [ -z "$REMOTEHOST" ] ; then
+            echo $SUDO make $inst_arch $inst_orig modules_install
+            $SUDO make $inst_arch $inst_orig modules_install
+        else
+	    set -x
+	    tmpdir=$(mktemp -d $MODULEINSTALLDIR/tmp-XXXXXXXX) || die "cannot create tempdir"
+	    if [ $strip -eq 1 ] 
+	    then
+		stripvar="INSTALL_MOD_STRIP=1"
+	    else
+		unset stripvar
+	    fi
+            make $inst_arch ${par:+-j ${par}} $inst_orig $stripvar INSTALL_MOD_PATH=$tmpdir modules_install || exit 1
+	    set +x
+            cd $tmpdir/lib/ || exit 1
+	    tar -cvjf - * | $CMD tar -C /lib -xjf -
+	    $CMD depmod -aq
+#            tar cvfj modules.tar.bz2 *
+#            scp -C modules.tar.bz2 root@$REMOTEHOST:/lib
+#            cd -
+#            $CMD "tar xvfj /lib/modules.tar.bz2 -C /lib/; rm /lib/modules.tar.bz2 ; depmod -aq"
+            rm -fr $tmpdir
+        fi
+
+	make_initrd $VERSION
+    fi
+
+    echo "New kernel version $VERSION installed."
+    if [ "$BOOTCONFIG" != "none" ]
+    then
+	if (( $bootloader )) ; then
+            editbootloaderconfig
+	else
+            add_bootloader
+	fi
+    fi
+}                                                                          # }}}
+
+do_removekernel()                                                          # {{{
+{
+    if [ -z "$VERSION" ] ; then
+	VERSION=$(find_version)
+    fi
+    if [ -z "$VERSION" ] ; then
+        echo "Please specify a version!"
+        exit 1
+    fi
+    set -x
+    # remove files in /boot
+    $SUDO $RMCMD /boot/vmlinux-$VERSION
+    $SUDO $RMCMD /boot/vmlinuz-$VERSION
+    $SUDO $RMCMD /boot/System.map-$VERSION
+    if (( $initrd )) ; then
+        $SUDO $RMCMD /boot/initrd-$VERSION
+    fi
+
+    if [ -z "$nomodule" ] ; then
+        $SUDO $RMCMD /lib/modules/$VERSION
+    fi
+    set +x
+    echo "New kernel version $VERSION removed."
+    if (( $bootloader )) ; then
+        editbootloaderconfig
+    else
+        remove_bootloader
+    fi
+}                                                                          # }}}
+
+$MAIN
+
+
+# vim: set sw=4 ts=4 et: :collapseFolds=1:
