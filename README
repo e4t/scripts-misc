@@ -120,3 +120,34 @@ TODO:
 An 'upstream' should be added for X11:XOrg flavored patches as well. The '-m'
 option needs to be reconsidered reflecting recent changes in requirements for
 the kernel.
+
+rpm-git
+-------
+This scripts when executed from a directory containing an unpacked source
+RPM and executes the %prep stage to unpack the sources in a subdirectory
+'src/' and apply patches relevant patches. If the environment variable
+BUILDENV is set, it take the specified path as the path to the buildroot
+and tries to determine the architecture from BUILDENV. This way the
+architecture specific macros of the target project are used to correctly
+follow conditional statements. If no BUILDENV is set, the script will
+execute %prep stage for the current system.
+Once all patches have been applied, it creates a git repo in 'src/'
+and set up a .gitignore.
+
+rpm-git [-f <fuzz>] [-t] [specfile]
+
+Options:
+   -f <fuzz>: specify maximum fuzz level. default: 0.
+   -t: test mode, will not create a src/ directory.
+   -a <arch>: specify architecture if not the same as host.
+
+'-f': Set a allowed fuzz level. This is useful for older versions of some
+      packages where a certain amount of fuzz was still allowed.
+'-t': Test mode: don't create a 'src/' directory and git repo. Useful
+      to test if all patches apply.
+'-a': specify an architecture in case it cannot be derived from BUILDENV.
+A specfile needs to be specified only if the current directory contains
+more than one.
+
+TODO: Also catch rpm macros set in the projconf in the current directory
+is an OBS package directory.

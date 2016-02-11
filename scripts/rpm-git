@@ -1,0 +1,258 @@
+#! /bin/sh
+#set -x
+die () {
+    echo $1 >&2
+    exit 1
+}
+
+usage () {
+    echo -e "$(basename $0) [-f <fuzz>] [-t] [specfile]\n"
+    echo "Options:"
+    echo "   -f <fuzz>: specify maximum fuzz level. default: 0."
+    echo "   -t: test mode, will not create a src/ directory."
+    echo "   -a <arch>: specify architecture if not the same as host."
+}
+
+save_cmdline ()  # <dir_to_put_file> <env> <command_to_save> <command_args> <sudo_or_empty>
+{
+    local dir=$1
+    local env=$2
+    local cmd=$3
+    local cmdargs="$(eval echo $4)"
+    local sudo=$5
+
+    cmd="${cmd##*/}"
+    cmdline="$cmd $cmdargs"
+
+    [ -z "$dir" -o -z "$cmd" -o -z "$cmdline" ] && return 1;
+
+    if [ -d $dir ]
+    then
+	if [ -e "$dir/.command_$cmd" -a ! -e "$dir/.command_$cmd.bak" ]
+	then
+	    $sudo mv "$dir/.command_$cmd" "$dir/.command_$cmd.bak"
+	fi
+	tmp=$(mktemp /tmp/file-XXXXXX)
+	[ -n "$env" ] && echo $env > $tmp
+	echo $cmdline >> $tmp 
+	$sudo mv $tmp "$dir/.command_$cmd"
+    fi
+}
+
+env=""
+cmd=$0
+cmdargs="${1+\"$@\"}"
+
+srcdir=src
+fuzz=0
+mydir=$(pwd)
+if [ -n "$BUILDENV" -a -e ~/.mymachine ]
+then
+    . ~/.mymachine; \
+    myroot=$BUILDENVHOME/$BUILDENV;
+    case $(uname -m) in
+	i686|i586|i486|i386) arch=i386 ;;
+	*) arch=$(uname -m) ;;
+    esac
+    # if no arch is specified append current arch
+    case $myroot in
+	*-i386|*-i586|*-x86_64|*-ppc|*-ppc64|*-ppc64le|*-s390|*-s390x|*-arm*) ;;
+	*) myroot=$myroot-$arch ;;
+    esac
+fi
+
+unset arch
+
+while [ -n "$1" ]
+do
+    case $1 in
+	-f) shift; fuzz=$1; shift;;
+        -t) test=1; shift;;
+	-a) arch=$2; shift; shift;;
+	--target) target="$1 $2"; shift; shift;;
+	-*) usage; die ;;
+	*) specfile="$1"; shift;;
+    esac
+done
+
+if [ -n "$test" ]
+then
+    tmpd=$(mktemp -d .tmpd-XXXXXX)
+    srcdir=$tmpd
+else
+    [ -d $mydir/$srcdir ] || mkdir $mydir/$srcdir
+fi
+
+if [ -z "$arch" ]
+then
+    if [ -n "$target" ]
+    then
+	arch=${target%-*}
+    elif [ -n "$BUILDENV" ]
+    then
+	case $BUILDENV in
+	    *-i386|*-i586)
+		arch=i386 ;;
+	    *-x86_64|*-ppc|*-ppc64|*-ppc64le|*-s390|*-s390x|*-arm*) 
+		arch=${BUILDENV##*-} ;;
+	    *) arch= ;;
+	esac
+    fi
+fi
+
+if [ -n "$arch" -a -z "$target" ]
+then
+    target="--target $arch-suse-linux"
+fi
+
+if [ -z "$specfile" ]
+then
+	specfile=$(ls *.spec) 2>/dev/null
+        [ -n "$specfile" ] || die "Cannot find specfile"
+	cnt=0
+	for i in $specfile
+	do
+	   cnt=$(( $cnt + 1 ))
+	done
+	[ $cnt -ne 1 ] && { echo "Can't find single spec file." >&2; exit 1; };
+fi
+
+[ "${specfile%%.spec}" = "${specfile}" ] && specfile="${specfile%%.}.spec"
+
+create_gitignore=$(which create_gitignore 2>/dev/null)
+if  [ -z "$create_gitignore" ]
+then
+    echo "create_gitignore not in path!"
+    create_gitignore=":"
+    sleep 5;
+fi
+
+if grep -q "^Release:.*\.<RELEASE.*>" $specfile
+then
+    tmpspec=$(mktemp $myroot/tmp/tmp-XXXXXX)
+    sed -e "s%<RELEASE\(.*\)>%\\1%" < $specfile > $tmpspec
+    specfile="${tmpspec##$myroot}"
+fi
+
+#if [ -n "$myroot" ]
+#then
+#    rcfile=$(mktemp /tmp/rpmrc.XXXXX)
+#    echo "macrofiles: $myroot/usr/lib/rpm/macros:$myroot/usr/lib/rpm/platform/%{_target}/macros:$myroot/usr/lib/rpm/fileattrs/*.attr:$myroot/usr/lib/rpm/suse/macros:$myroot/etc/rpm/macros.*:$myroot/etc/rpm/macros:$myroot/etc/rpm/%{_target}/macros" >> $rcfile
+#    rcfiles="$myroot/usr/lib/rpm/rpmrc:~/.rpmrc:$rcfile"
+#fi
+#${rcfiles:+--rcfile $rcfiles}
+
+mount_pwd () {
+    local myroot=$1
+    local tmp last thisdir
+
+    if [ -n "$myroot" ]
+    then
+	thisdir=$(pwd)
+	if [ ! -d $myroot/$thisdir ]
+	then
+	    tmp=$thisdir
+	    while [ "$tmp" != "/" ]
+	    do
+		last=$tmp
+		tmp=${tmp%/*}
+		if [ -d $myroot/$tmp ]
+		then
+		    break;
+		fi
+	    done
+	    if [ -n "$last" ]
+	    then
+		sudo mkdir ${myroot}${last} && rmdirs="${myroot}${last} $rmdirs"
+		sudo chown $(stat $last --printf="%U:%G") ${myroot}${last}
+		sudo mount -o bind $last ${myroot}${last} && mount_list="$myroot/$last $mount_list"
+	    fi
+	else
+	    last=$thisdir
+	    sudo mount -o bind $last $myroot/$last && mount_list="$myroot/$last $mount_list"
+	fi
+    fi
+}
+
+mount_proc () {
+    local myroot=$1
+    sudo mount -t proc proc $myroot/proc && mount_list="$myroot/proc $mount_list"
+}
+
+teardown_all () {
+    local mounts="$1"
+    local dirs="$2"
+
+    for i in $mounts
+    do
+	sudo umount $i
+    done
+    for i in $dirs
+    do
+	sudo rmdir $i
+    done
+}
+
+cleanup_all() {
+    local tmpspec="$1"
+    local tmpscript="$2"
+    local tmpd="$3"
+    [ -n "$tmpspec" ] && rm -rf $tmpspec
+    [ -n "tmpscript" ] && rm -rf $tmpscript
+    [ -n "$tmpd" ] && rm -rf $tmpd
+}
+
+if [ -z "$myroot" ]
+then
+    trap "cleanup_all \"\$tmpspec\" \"\$tmpscript\" \"\$tmpd\"" EXIT    
+    /usr/bin/rpmbuild  -bp $target \
+	--define "_default_patch_fuzz $fuzz" --define "_sourcedir $mydir" \
+	--define "_target ${arch}_linux" --define "_target_cpu ${arch}" \
+	--define "_builddir $mydir/$srcdir" --define "_topdir $mydir" \
+	--define "_buildrootdir $mydir/.BUILDROOT" \
+	--define "_rpmdir $mydir/.RPMS" \
+	--define "_srcrpmdir $mydir/.SRPMS" \
+	--define "_specdir $mydir" \
+	--nodeps $specfile
+    exitcode=$?
+else
+    trap "cleanup_all \"\$tmpspec\" \"\$tmpscript\" \"\$tmpd\"; teardown_all \"\$mount_list\" \"\$rmdirs\"" EXIT
+    mount_pwd "$myroot"
+    mount_proc "$myroot"
+    thisdir=$(pwd)
+    tmpscript=$(mktemp $myroot/tmp/rpm_execXXXXX)
+    echo -e "#!/bin/sh\ncd $thisdir; /usr/bin/rpmbuild  -bp $target \
+	--define \"_default_patch_fuzz $fuzz\" --define \"_sourcedir $mydir\" \
+	--define \"_target ${arch}_linux\" --define \"_target_cpu ${arch}\" \
+	--define \"_builddir $mydir/$srcdir\" --define \"_topdir $mydir\" \
+	--define \"_buildrootdir $mydir/.BUILDROOT\" \
+	--define \"_rpmdir $mydir/.RPMS\" \
+	--define \"_srcrpmdir $mydir/.SRPMS\" \
+	--define \"_specdir $mydir\" \
+	--nodeps $specfile" > $tmpscript
+    chmod u+x $tmpscript
+    sudo sh -c "HOME=$homedir chroot $myroot su - $USER ${tmpscript##$myroot}"
+    exitcode=$?
+    teardown_all "$mount_list" "$rmdirs"
+    trap "cleanup_all \"\$tmpspec\" \"\$tmpscript\" \"\$tmpd\"" EXIT    
+fi
+#$myroot/usr/bin/rpmbuild  -v --showrc ${myroot:+--root $myroot} -bp \
+#   --define "_default_patch_fuzz $fuzz" --define "_sourcedir $mydir" \
+#   --define "_builddir $mydir/$srcdir" --define "_topdir $mydir" --nodeps $specfile
+
+
+cleanup_all "$tmpspec" "$tmpscript" "tmpd"
+trap "" EXIT
+[ -n "$tmpd" ] && exit $exitcode
+
+[ $exitcode -ne 0 ] && die "rpmbuild returned error"
+
+cd $mydir/$srcdir
+find . -name "*.orig" | xargs -r rm
+cat > .gitignore <<EOF
+*.orig
+*.rej
+EOF
+
+git init; $create_gitignore; git add .; git commit -m "Initial import."
+save_cmdline . "$env" "$cmd" "$cmdargs" ""
