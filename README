@@ -15,6 +15,27 @@ personal data and adjust to the local setup. Common settings will
 be listed in this section. 
 Script specific settings will be listed in the respective sections.
 
+Scripts will source $HOME/.myconfig to set the personal preferences.
+To be able to share this file between different machines, it should
+source a machine specific config.
+The following environment variables are recognized from $HOME/.myconfig:
+
+TMPDIR=  # /var/tmp
+# company email address
+MY_COMPANY_EMAIL= # "me@suse.com"
+# email address preferred for software projects
+MY_EMAIL= # "me@myfavoriteproject.org"
+test -e ${HOME}/.mylocalconfig && . ${HOME}/.mylocalconfig
+test -e ${HOME}/.mymachine-${HOSTNAME} && . ${HOME}/.mymachine-${HOSTNAME}
+
+$HOME/.mymachine-* should contain:
+
+BUILDENVHOME=/space/bev
+BUILDEXTRADIRS="/space /space1"
+SUSEKERNEL=/space/suse_kernel/kernel-source
+CHECKPATCH=/space/kernel/linux-2.6/scripts/checkpatch.pl
+SPACEDIR=/space
+
 Help
 ----
 
@@ -130,7 +151,9 @@ BUILDENV is set, it take the specified path as the path to the buildroot
 and tries to determine the architecture from BUILDENV. This way the
 architecture specific macros of the target project are used to correctly
 follow conditional statements. If no BUILDENV is set, the script will
-execute %prep stage for the current system.
+execute %prep stage for the current system. If BUILDENV is set, BUILDENVHOME
+needs to be set as well. This is the directory where the changeroot
+environment exists.
 Once all patches have been applied, it creates a git repo in 'src/'
 and set up a .gitignore.
 
@@ -151,3 +174,41 @@ more than one.
 
 TODO: Also catch rpm macros set in the projconf in the current directory
 is an OBS package directory.
+
+setup-bev.sh
+------------
+Set up a build changeroot. Given a list of 'BuildRequires: ' in a file
+<PRODUCT>.desc, the script set up a fully installed build chroot
+with all the BuildRequires and their dependencies installed.
+This chroot is meant to be used with the localbuild.sh and my-rpmbuild
+scripts below.
+The 'BuildRequires: ' lines have the same format as in a spec-file
+and can be taken straight from a spec file.
+The changeroot can be used to build software for the system installed
+in the chroot, instead of the host system. With binfmt and kvm this
+even works for other architectures.
+This script requires the BUILDENVHOME environment variable to be set.
+It specifies where the chroot directory is to be created.
+
+setup_bev.sh [-a <arch>] [-r <repository>] [-d <directory>] <PRODUCT> [POST]
+Options:
+        -a <arch>: select architecture: i586, x86_64
+        -r <repository>: set repository, default: standard
+        -d <directory>: use alternate directory for build env
+        <PRODUCT>: product name: openSUSE-13.2, SLE-12-SP1, etc.
+        POST: For SLE - if not to be included in the product name
+              - GA Update Update:Test (default: GA)
+
+'-a <arch>': specify the architecture for which to create the environment.
+'-r <repository>': set name of the binary repository
+'-d <directory>': overrides BUILDENVHOME
+<PRODUCT>: the product name in OBS.
+POST: Used for SLE - specifies the version (ie. GA, Update, Update:Test)
+      if this isn't to be sepcified with the product.
+
+This script will also set up a home and an entry to the /etc/passwd file
+for the current user (the one set in $USER) so that a login into the
+chroot is possible.
+If the environment variable $SPACEDIR is set it will place the package
+cache for the packages to install in $SPACEDIR/osbuild-packagecache.
+Furthermore it will create $SPACEDIR in the chroot.
