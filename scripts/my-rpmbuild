@@ -1,0 +1,423 @@
+#! /bin/sh
+
+#set -x
+shopt -s extglob
+
+die () {
+    echo -e $1 >&2
+    clean
+    exit 1
+}
+
+clean() {
+    if [ "$clean_specfile" -a "$clean_specfile" != "$specfile" ]
+    then
+	rm -rf $clean_specfile
+    fi
+}
+
+save_cmdline ()  # <dir_to_put_file> <env> <command_to_save> <command_args> <sudo_or_empty>
+{
+    local dir=$1
+    local env=$2
+    local cmd=$3
+    local cmdargs="$(eval echo $4)"
+    local sudo=$5
+
+    cmd="${cmd##*/}"
+    cmdline="$cmd $cmdargs"
+
+    [ -z "$dir" -o -z "$cmd" -o -z "$cmdline" ] && return 1;
+
+    if [ -d $dir ]
+    then
+	if [ -e "$dir/.command_$cmd" -a ! -e "$dir/.command_$cmd.bak" ]
+	then
+	    $sudo mv "$dir/.command_$cmd" "$dir/.command_$cmd.bak"
+	fi
+	tmp=$(mktemp /tmp/file-XXXXXX)
+	[ -n "$env" ] && echo $env > $tmp
+	echo $cmdline >> $tmp 
+	$sudo mv $tmp "$dir/.command_$cmd"
+    fi
+}
+
+env="BUILDENV=$BUILDENV"
+cmd=$0
+cmdargs="${1+\"$@\"}"
+
+sanitize_specfile () {
+    local specfile
+
+    specfile=$1
+
+    if grep -q "^Release:.*\.<RELEASE.*>" $specfile
+    then
+	tmp=$(mktemp ${thisdir}/.tmp-XXXXXX.spec)
+	sed -e "s%<RELEASE\(.*\)>%\\1%" < $specfile > $tmp
+	test -e $tmp || exit 1
+	echo $tmp
+    else
+	echo $specfile
+    fi
+}
+
+usage() {
+    echo "$(basename $0) [-n][-s][-b buildopt][-e buildenv] [specfile]"
+    echo "Options:"
+    echo -e "\t-n: do not create a git repo"
+    echo -e "\t-s: don't build in a separated \`lndir'ed\` directory"
+    echo -e "\t-a <arch>: specify architecture if not the same as host."
+    echo -e "\t-b <buildopt>: <buildopt>: -bc -bb -bi -bs"
+    echo -e "\t-e <buildenv>: the build environment overrides BUILDENV if set"
+    echo -e "\t<specfile>: the specfile (if applicable with path)"
+}
+
+find_specfile() {
+    local specfiles specfile
+#    pwd >&2
+    specfiles="$(echo *.spec)"
+    if [ "$specfiles" == '*.spec' ]
+    then
+	die "No specfiles given and none in current directory"
+    fi
+    for i in *.spec
+    do
+	if [ -n "$specfile" ]
+	then
+	    die "more than one specfile in this directory: $specfiles"
+	fi
+	specfile=$i
+    done
+    echo $specfile
+    return 0
+}
+
+find_specdir() {
+    local specfile specdir thisdir
+
+    specfile=$1
+
+    if [ -e $specfile ]
+    then
+	specdir=${specfile%/*.spec}
+	if [ "$specdir" = "$specfile" ]
+	then
+	    specdir=$(pwd)
+	else
+	    specdir=$(readlink -f ${specfile%/*.spec})
+	fi
+    else
+	die "specfile doesn't exist"
+    fi
+    echo $specdir
+}
+
+canonicalize_specfile()
+{
+    local specfile
+    
+    specfile=$1
+    specfile=${specfile%%.spec}.spec
+    echo $specfile
+}
+
+exec_build () {
+    local builddir buildopt specfile
+
+    buildopt=$2
+    specfile=$3
+
+    builddir=$1
+    sourcedir=$specdir #$thisdir
+    topdir=$thisdir
+    buildrootdir=$thisdir/.BUILDROOT
+    rpmdir=$thisdir/.RPMS
+    srcrpmdir=$thisdir/.SRPMS
+    #  specdir=$specdir
+
+    mkdir -p $buildrootdir $rpmdir $srcrpmdir
+
+    if [ -z "$buildenv" ]
+    then
+	rpmbuild $buildopt $target --nodeps --define "_srcrpmdir $srcrpmdir" \
+	    --define "_sourcedir $sourcedir" --define "_rpmdir $rpmdir" \
+	    --define "_target ${arch}_linux" --define "_target_cpu ${arch}" \
+	    --define "_builddir $builddir" \
+	    --define "_buildrootdir $buildrootdir" \
+	    --define "_topdir $topdir" \
+	    --buildroot "$buildrootdir" \
+	    --define "_specdir $specdir" $specfile
+    else
+	if which localbuild.sh &> /dev/null
+	then
+	    command="rpmbuild $buildopt $target --nodeps --define \"_srcrpmdir $srcrpmdir\"\
+                    --define \"_sourcedir $sourcedir\"\
+                    --define \"_rpmdir $rpmdir\"\
+	            --define \"_target ${arch}_linux\"\
+                    --define \"_target_cpu ${arch}\"\
+                    --define \"_builddir $builddir\"\
+                    --define \"_buildrootdir $buildrootdir\"\
+		    --define \"_topdir $topdir\"\
+			--buildroot \"$buildrootdir\" \
+                    --define \"_specdir $specdir\" $specfile"
+	    localbuild.sh ${buildenv:+-s} $buildenv $command
+	else
+	    die "localbuild.sh not found."
+	fi
+    fi
+}
+
+path_is_absolute () {
+    local path
+    path=$1
+    [ -z "${path##/*}" ] && return 0
+    return 1
+}
+
+query() {
+    local msg ret
+    msg=$1
+    while true
+    do
+	read -p "$msg [y/n]" -n 1 -s ret
+	case $ret in
+	    Y|y) return 0 ;;
+	    N|n) return 1 ;;
+	    *) continue ;;
+	esac
+    done
+}
+
+check_buildrequires () {
+    local specfile buildroot buildrequires notinstalled
+    local collect_script
+
+    specfile=$1
+    buildroot=$2
+
+    collect_script=collect_all_requires.pl
+
+    if ! which $collect_script &> /dev/null
+    then
+	echo "$collect_script not found. Cannot check if buildrequires are met!"
+	sleep 3
+	return 0
+    fi
+
+    [ -n "$buildroot" ] && buildroot="--root $buildroot"
+
+    buildrequires=$($collect_script $specfile)
+    skip=0
+    for i in $buildrequires
+    do
+	if [ $skip -eq 1 ]
+	then
+	    skip=0
+	    continue
+	fi
+	if [ "$i" = ">" -o "$i" = ">=" ]
+	then
+	    skip=1
+	    continue
+	fi
+	if ! rpm $buildroot -q --whatprovides $i &> /dev/null
+	then
+	    j="${i##pkgconfig(}"
+	    j="${j%)}"
+	    if [ "$i" = "$j" ]
+	    then
+		notinstalled="$notinstalled $i"
+	    else
+		rpm $buildroot -q --whatprovides $j &> /dev/null || \
+		    notinstalled="$notinstalled $i"
+	    fi
+	fi
+    done
+    if [ -n "$notinstalled" ]
+    then
+	echo -e "BuildRequires: $notinstalled"
+	query "    don't seem to be installed. Continue regardless?" || return 1
+    fi
+    return 0
+}
+
+get_builddir () {
+    local buildenv
+
+    buildenv=$1
+
+    if [ -n "${buildenv}" ]
+    then
+	localbuild.sh -i ${buildenv:+-s} $buildenv
+    fi
+}
+
+do_build ()  {
+    local build_in_src srcdir buildopt specfile
+    local builddir
+    build_in_src=$1
+    srcdir=$2
+    buildopt=$3
+    specfile=$4
+
+    buildopt="--short-circuit $buildopt"
+    if [ "$build_in_src" = "0" ]
+    then
+	which lndir &>/dev/null || die "no \'lndir\' binary found"
+	[ ! -d .build ] && mkdir -p .build
+	cd .build
+	path_is_absolute $srcdir || srcdir="../$srcdir"
+	lndir $srcdir
+	cd -
+	builddir=$thisdir/.build
+    else
+	path_is_absolute $srcdir || srcdir="$thisdir/$srcdir"
+	builddir=$srcdir
+    fi
+    exec_build $builddir "$buildopt" $specfile
+}
+
+do_local_build () {
+    local buildopt specfile
+    buildopt=$1
+    specfile=$2
+    if [[ "$buildopt" == *-bp* ]]
+    then
+	die "buildopt -bp doesn't make sense with local directory"
+    elif [[ "$buildopt" == +(-ba|-bl|-bs) ]]
+    then
+	die "buildopt $buildopt not allowed for build in local directory"
+    fi
+    buildopt="--short-circuit $buildopt"
+    exec_build $thisdir "$buildopt" $specfile
+}
+
+test_build_opts_do_build () {
+    local buildopt build_in_src specfile
+    buildopt=$1
+    build_in_src=$2
+    specfile=$3
+
+    if [[ "$buildopt" == +(-bp|-bi|-bc|-bb) ]]
+    then
+	# build options allow a --short-circuit build
+	if [ -d $srcdir ]
+	then
+	    # a subdirectory with the unpacked sources exists
+	    do_build $build_in_src ./$srcdir "$buildopt" $specfile
+	else
+	    # if possible, create a subdirectory with the unpacked sources
+	    if test -z "$nogit" && which rpm-git &> /dev/null
+	    then
+		# we can create a subdirectory with unpacked sources
+		rpm-git $target $specfile || die "rpm-git failed"
+		do_build $build_in_src ./$srcdir "$buildopt" $specfile
+	    else
+		# just build, don't bother to create a separate src dir
+		exec_build $thisdir/.build "$buildopt" $specfile
+	    fi
+	fi
+    else
+	# just build, don't bother to create a separate src dir
+	exec_build $thisdir/.build "$buildopt" $specfile
+    fi
+}
+
+[ -e $HOME/.mymachine ] && . $HOME/.mymachine
+
+srcdir=src
+localbuild=0
+build_in_src=0
+unset arch
+
+while [ -n "$1" ]
+do
+   cmd=$1
+   shift
+   case $cmd in
+       -n) nogit=1 ;;
+       -b) buildopt=$1; shift ;;
+       -e) buildenv=$1; shift ;;
+       -a) shift; arch=$1; shift ;;
+       -l) localbuild=1 ;;
+       -s) build_in_src=1 ;;
+       *-h*) usage; exit 0 ;;
+       *) specfile=$cmd ;;
+   esac
+done
+
+[ -n "$buildenv" -a $localbuild -eq 1 ] && \
+    die "-l and -e options cannot be used together"
+
+thisdir=$(pwd)
+
+[ -z "$buildenv" ] && buildenv=$BUILDENV
+[ -z "$buildopt" ] && buildopt=-bc
+[ -z "$buildenv" -a $localbuild -eq 0 ] && die "Buildenv not set."
+
+if [ -z "$arch" ]
+then
+    case $buildenv in
+	*-i386|*-i586)
+	    arch=i386 ;;
+	*-x86_64|*-ppc|*-ppc64|*-ppc64le|*-s390|*-s390x|*-arm*) 
+	    arch=${buildenv##*-} ;;
+	*) arch= ;;
+    esac
+fi
+if [ -n $arch ]
+then
+    target="--target $arch-suse-linux"
+else
+    target=
+fi
+
+if [ -n "$specfile" ]
+then
+    # specfile given
+    specfile=$(canonicalize_specfile $specfile) || exit $?
+    specdir=$(find_specdir $specfile) || exit $?
+
+    clean_specfile=$(sanitize_specfile $specfile)
+    check_buildrequires $clean_specfile $(get_builddir $buildenv) \
+	|| die "Buildrequires not satisfied"
+
+    if [ $(stat -c %i $specdir) -eq $(stat -c %i $thisdir) ]
+    then
+	# $specdir is current dir
+	specdir=$thisdir
+	if [ -e ${specfile%%.spec}.changes ]
+	then
+	    # $specdir contains rpm sources
+	    test_build_opts_do_build "$buildopt" $build_in_src $clean_specfile
+	else
+	    # assume: current dir contains a buildable tree
+	    do_local_build "$buildopt" $clean_specfile
+	fi
+    else
+	# assume: current dir contains a buildable tree
+	do_local_build "$buildopt" $clean_specfile
+    fi
+else
+    # no specfile given: current dir contains rpm sources
+    specfile=$(find_specfile) || exit $?
+    specdir=$thisdir
+    clean_specfile=$(sanitize_specfile $specfile)
+    check_buildrequires $clean_specfile $(get_builddir $buildenv) \
+	|| die "Buildrequires not satisfied"
+    test_build_opts_do_build "$buildopt" $build_in_src $clean_specfile	
+fi
+
+clean
+
+if [ -z "$build_in_src" ]
+then
+    savedir=$thisdir/.build
+else
+    savedir=./$srcdir
+fi
+if [ -d $savedir ]
+then
+    save_cmdline . "$env" "$cmd" "$cmdargs" ""
+fi

@@ -142,6 +142,8 @@ An 'upstream' should be added for X11:XOrg flavored patches as well. The '-m'
 option needs to be reconsidered reflecting recent changes in requirements for
 the kernel.
 
+Requires: git, rpmbuild, sudo, coreutils, util-linux
+
 rpm-git
 -------
 This scripts when executed from a directory containing an unpacked source
@@ -212,3 +214,76 @@ chroot is possible.
 If the environment variable $SPACEDIR is set it will place the package
 cache for the packages to install in $SPACEDIR/osbuild-packagecache.
 Furthermore it will create $SPACEDIR in the chroot.
+
+localbuild.sh
+-------------
+Mount the current directory ${PWD} into chroot environment specified
+by $BUILDENV or -s <SYSTEM> and execute <command> there. It can also
+be used to start an interactive shell in the BUILDROOT.
+This supplements setup-bev.sh which is used to set up the chroot
+environment. Alongside the current directory, all directories listed
+in BUILDEXTRADIRS are bind-mounted into the chroot at the same location
+relative to the root of the chroot as they are on the host system.
+
+localbuild.sh [-s <SYSTEM>] [-l|-i|<command>]
+Options:
+	  -s <SYSTEM> := openSUSE-<version> | SLE..
+	     or set the BUILDENV environment variable
+	  -l: start interactive shell in local home directory.
+	  -i: info only: print buildroot directory.
+	  <command>: run <command> in current directory but in build environment.
+If run without command, start interactive shell in current directory.
+use BUILDEXTRADIRS to specify extra directories to include in build environment.
+use BUILDENVHOME to specify location of build environment.
+
+'-s': Set the target chroot system. Can be used in place of the BUILDENV
+environment variable.
+'-l': start an interactive shell in the bind mounted home directory
+      in the chroot.
+'-i': Just liste the name of the chroot.
+'<command>': execute <command> in the chroot. This can be used to build
+in a build environment that is different from the host system.
+
+Requires: coreutils, sudo, grep, util-linux
+
+my-rpmbuild
+-----------
+rpmbuild package in chroot environment. Executed from a rpm source
+directory, this script checks for the presence of a src directory.
+If none exists, it will run rpm-git to create one. It creates a linked
+source tree in the subdirectory .build calls localbuild.sh to mount the
+package into a a buildroot environment (change root) and to perform
+the rpm build stage specified with the 'b' option (the --short-circuit
+option is set to not overwrite any of the previous build stages).
+The mount point in the chrooted environment will be the same as on the
+host.
+This can be used to build modified sources for a target system that's
+different from the host system in exactly the same way as it would be
+done in the build system. Furthermore, when mounting the build directory
+on a test system in the same location as on the host, all paths to the
+source files are set up so that gdb will find them.
+
+my-rpmbuild [-n][-s][-b buildopt][-e buildenv] [specfile]
+Options:
+        -n: do not create a git repo
+        -s: don't build in a separated `lndir'ed` directory
+        -a <arch>: specify architecture if not the same as host.
+        -b <buildopt>: <buildopt>: -bc -bb -bi -bs
+        -e <buildenv>: the build environment overrides BUILDENV if set
+        <specfile>: the specfile (if applicable with path)
+'-n': do not create a git repo of the package if none exists. It
+      requires the directory .build to exist and contain the code to
+      build.
+'-s': do not create a speparate lndir'ed build directory. Some packages
+    don't build well in such an environment (qmake of Qt5 is an example
+    for a tool which fails in an lndir'ed environment in a non-trivial
+    way).
+'-a <arch>': specifies the architecture of the target system if it
+    is different from the host and cannot be determined from the
+    change root build environment.
+'-b <buildopt>': the rpmbuild build stage to execute: supported values
+    are: '-bc, -bb, -bi, -bs'.
+'-e <buildenv>':
+'specfile': specify the spec file if it cannot be guessed.
+
+Requires: requires for localbuild.sh and rpm-git, lndir, rpmbuild, sed
