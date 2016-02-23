@@ -209,14 +209,14 @@ is_upstream_repo() {
 	n=$(( $n - 1 ))
 	if [[ "${repo}" =~ "${array[$n]}" ]]
 	then
-	    return 0
+	    return 1
 	fi
-	[ $n -gt 0 ] || return 1
+	[ $n -gt 0 ] || return 0
     done
 }
 
 get_git_repo() {
-    $(git remote -v  | grep "^origin" | awk '{print $2}' |tail -n1)
+    echo $(git remote -v  | grep "^origin" | awk '{print $2}' |tail -n1)
 }
 
 add_git_repo() {
