@@ -63,10 +63,11 @@ sanitize_specfile () {
 }
 
 usage() {
-    echo "$(basename $0) [-n][-s][-b buildopt][-e buildenv] [specfile]"
+    echo "$(basename $0) [-n][-s][-y][-b buildopt][-e buildenv] [specfile]"
     echo "Options:"
     echo -e "\t-n: do not create a git repo"
     echo -e "\t-s: don't build in a separated \`lndir'ed\` directory"
+    echo -e "\t-y: say \'yes\' to every question"
     echo -e "\t-a <arch>: specify architecture if not the same as host."
     echo -e "\t-b <buildopt>: <buildopt>: -bc -bb -bi -bs"
     echo -e "\t-e <buildenv>: the build environment overrides BUILDENV if set"
@@ -176,8 +177,10 @@ path_is_absolute () {
 }
 
 query() {
-    local msg ret
-    msg=$1
+    local yes msg ret
+    yes=$1
+    msg=$2
+    [ $yes -eq 1 ] && return 0
     while true
     do
 	read -p "$msg [y/n]" -n 1 -s ret
@@ -237,7 +240,7 @@ check_buildrequires () {
     if [ -n "$notinstalled" ]
     then
 	echo -e "BuildRequires: $notinstalled"
-	query "    don't seem to be installed. Continue regardless?" || return 1
+	query $yes "    don't seem to be installed. Continue regardless?" || return 1
     fi
     return 0
 }
@@ -329,6 +332,7 @@ test_build_opts_do_build () {
 srcdir=src
 localbuild=0
 build_in_src=0
+yes=0
 unset arch
 
 while [ -n "$1" ]
@@ -339,7 +343,8 @@ do
        -n) nogit=1 ;;
        -b) buildopt=$1; shift ;;
        -e) buildenv=$1; shift ;;
-       -a) shift; arch=$1; shift ;;
+       -a) arch=$1; shift ;;
+       -y) yes=1 ;;
        -l) localbuild=1 ;;
        -s) build_in_src=1 ;;
        *-h*) usage; exit 0 ;;
@@ -366,11 +371,13 @@ then
 	*) arch= ;;
     esac
 fi
-if [ -n $arch ]
+
+if [ -n "$arch" ]
 then
     target="--target $arch-suse-linux"
+    echo "Using arch: $arch"
 else
-    target=
+    die "Cannot get arch"
 fi
 
 if [ -n "$specfile" ]

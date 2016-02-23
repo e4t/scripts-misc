@@ -267,6 +267,7 @@ my-rpmbuild [-n][-s][-b buildopt][-e buildenv] [specfile]
 Options:
         -n: do not create a git repo
         -s: don't build in a separated `lndir'ed` directory
+	-y: say 'yes' to every question
         -a <arch>: specify architecture if not the same as host.
         -b <buildopt>: <buildopt>: -bc -bb -bi -bs
         -e <buildenv>: the build environment overrides BUILDENV if set
@@ -278,6 +279,8 @@ Options:
     don't build well in such an environment (qmake of Qt5 is an example
     for a tool which fails in an lndir'ed environment in a non-trivial
     way).
+'-y': When being asked questions in interactive mode, always say 'yes'.
+    Useful when run in batch mode.
 '-a <arch>': specifies the architecture of the target system if it
     is different from the host and cannot be determined from the
     change root build environment.
