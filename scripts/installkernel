@@ -42,6 +42,7 @@ dont_ask=0
 lilo=0
 strip=0
 initrd=1
+dumprd=0
 inst_arch=""
 inst_orig=""
 orig=""
@@ -65,6 +66,9 @@ while getopts nbhflsio:m:a:j: name ; do
         i)
             initrd=0
             nomodule=1
+            ;;
+        d)
+            dumprd=1
             ;;
         l)
             lilo=1
@@ -98,6 +102,7 @@ while getopts nbhflsio:m:a:j: name ; do
             echo "   -b:  edit bootloader configuration manually"
 	    echo "   -f:  don't ask (doesn't update bootloader)"
 	    echo "   -i:  don't update bootloader/initrd"
+            echo "   -d:  do    update kdump initrd"
 	    echo "   -m:  modules to install"
 	    echo "   -j <n>: parallelize actions that can be parallelized"
 	    echo "   -l:  use lilo"  
@@ -307,6 +312,15 @@ make_initrd()
     fi
 }
 
+make_dumprd()
+{
+    if (( $dumprd )) ; then
+        echo "Making dumprd"
+        echo $SUDO $CMD /sbin/mkdumprd -k $VERSION -f
+        $SUDO $CMD /sbin/mkdumprd -k $VERSION -f
+    fi
+}
+
 do_installmodules()
 {
     VERSION=$(find_version)
@@ -364,6 +378,10 @@ do_installmodules()
     if [ $initrd -eq 1 ]
     then
 	make_initrd
+    fi
+    if [ $dumprd -eq 1 ]
+    then
+	make_dumprd
     fi
 }
 

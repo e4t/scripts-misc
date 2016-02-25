@@ -64,6 +64,7 @@ Options
    -b:  edit bootloader configuration manually
    -f:  don't ask (doesn't update bootloader)
    -i:  don't update bootloader/initrd
+   -d:  do    update kdump initrd
    -m:  modules to install
    -j <n>: parallelize actions that can be parallelized
    -l:  use lilo
@@ -80,6 +81,8 @@ specifying more than one module, the list needs to appear in quotes.
 specified. This is useful when building with the O=<build_dir> parameter.
 '-i' will prevent the boot loader from being update. This will also prevent
 the initrd from being built.
+'-d' will invoke 'mkdumprd -f' for the new kernel so it can be used for
+kexec, too.
 '-s' will cause the kernel image and the modules to be stripped.
 '-a <arch>' if the kernel was built for a different architecture than the 
 build host (for example i586 on x86_64) this option must be specified. 
