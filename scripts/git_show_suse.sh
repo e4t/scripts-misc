@@ -366,7 +366,6 @@ do
 	    ;;
 	*)
 	    get_range $cmd || die "Cannot get range."
-	    shift
 	    ;;
     esac
 done
@@ -386,7 +385,11 @@ else
     range="HEAD^.."
 fi
 
-list=$(git rev-list --reverse $range)
+for i in $range
+do
+    list="$list $(git rev-list --reverse $i)"
+done
+
 max=0
 for i in $list
 do
