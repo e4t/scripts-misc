@@ -293,3 +293,31 @@ Options:
 'specfile': specify the spec file if it cannot be guessed.
 
 Requires: requires for localbuild.sh and rpm-git, lndir, rpmbuild, sed
+
+rpm-bisect
+----------
+Bisect a project and create a tarball for inclusion in source rpm.
+This script can be run even in the middle of a running bisect. It
+saves/restores the current state, memorizes its state (by saving it
+to a file with a unique identifier) so the bisect can be continued
+at any time. The tarball will be copied to the directory containing
+the source rpm. No actual checkout of the bisected version will be
+done.
+
+rpm-bisect command [options]
+    Run a bisect, output a tar-archive of the results and store the
+    state in a config file.
+    Command:
+             init <name> <target_dir> [-p <package> ] [-c <compression> ] [-v] (bad good ... | -r bad ... good)
+	     Options:
+                  <name>: name to identify the bisect (ie. bugzilla ID)
+                  <target_dir>: directory to copy the tarball to
+                  -r: reverse good/bad
+                  -p <package>: specify package name (default: git dir name)
+                  -c <compression>: specify compression for tar ball
+                                                     (default: bz2)
+                  -v: verbose, print version string used in tarball
+             good [-v] <name>
+             bad  [-v] <name>
+
+Requires: core-utils, sed, git

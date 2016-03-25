@@ -1,0 +1,181 @@
+#! /bin/bash
+#set -x
+
+## Concept:
+##git config --global tar.tar.bz2.command "bzip2 -c"
+##version=$(git describe HEAD | sed -e "s/-/./" -e  "s/-/_/")
+##git archive --format=tar.bz2 --prefix=xf86-video-intel-$version/ -o /space/obs/home_eeich_Test_Intel/xf86-video-intel/xf86-video-intel-$version.tar.bz2 HEAD
+
+VERBOSE=0
+
+die () {
+    case $1 in
+     -n)
+        echo -e "$1" >&2
+	;;
+     *) shift
+        echo -e "$1" >&2
+	usage >&2 
+	;;
+    esac
+    exit 1
+}
+
+usage () {
+cat<<EOF
+    $0 command [options]
+    Run a bisect, output a tar-archive of the results and store the
+    state in a config file.
+    Command: 
+             init <name> <target_dir> [-p <package> ] [-c <compression> ] [-v] (bad good ... | -r bad ... good)
+             Options:
+                  <name>: name to identify the bisect (ie. bugzilla ID)
+                  <target_dir>: directory to copy the tarball to
+    	          -r: reverse good/bad
+		  -p <package>: specify package name (default: git dir name)
+		  -c <compression>: specify compression for tar ball
+		     		    	    	     (default: bz2)
+                  -v: verbose, print version string used in tarball
+	     good [-v] <name>
+	     bad  [-v] <name>
+EOF
+}
+
+create_config () {
+   local configfile=$1
+   local tmp=$(mktemp "rpm_bisect_XXXXX")
+   echo "TARGET_DIR=$TARGET_DIR" >> $tmp
+   echo "REVERSE=$REVERSE" >> $tmp
+   echo "PACKAGE=$PACKAGE" >> $tmp
+   echo "COMPRESSION=$COMPRESSION" >> $tmp
+   echo "VERBOSE=$VERBOSE" >> $tmp
+   echo "replay () {" >> $tmp
+   echo "cat <<MYEOF" >> $tmp
+   git bisect log >> $tmp
+   echo "MYEOF" >> $tmp
+   echo "}" >> $tmp
+   mv $tmp $configfile
+}
+
+create_archive () {
+   local compression=$1
+   local verbose=$2
+   local version=$(git describe BISECT_HEAD | sed -e "s/-/./" -e  "s/-/_/")
+   git archive --format=tar.$compression --prefix=$PACKAGE-$version/ \
+   -o $TARGET_DIR/$PACKAGE-$version.tar.$compression BISECT_HEAD
+   [ $verbose -gt 0 ] && echo $version
+}
+
+bisect_save () {
+  local file=$(mktemp .bisect_save_XXXXXX)
+  if git bisect log > $file 2>/dev/null
+  then
+     echo $file
+  else
+     rm $file
+  fi
+  return
+}
+
+bisect_restore () {
+   local file=$1
+   git bisect reset
+   if [ -n "$file" ]
+   then
+	git bisect replay $file
+	rm $file
+   fi
+}
+
+fix_arg () {
+  local arg=$1
+  if [ "$REVERSE" -eq 1 ]
+  then
+	case $arg in
+	    good) echo "bad" ;;
+	    bad) echo "good" ;;
+	esac
+  else
+	echo $arg
+  fi
+}
+
+test_config () {
+ local compression=$1
+ local command=$(git config --get "tar.tar.${compression}.command")
+ [ -z "$command" ] && die -n "compression $compression not configured in git.\n\
+  use \"git config --add \"tar.tar.${compression}.command\" \"<command>\"\""
+}
+
+case $1 in
+     init)
+	REVERSE=0
+	COMPRESSION="bz2"
+	PACKAGE=$(basename $(git rev-parse --show-toplevel))
+	shift
+	name=$1; shift
+	TARGET_DIR=$1; shift
+	[ -z "$name" -o -z "$TARGET_DIR" ] && die "arguments missing for init"
+	while [ -n "$1" ]
+	do
+	  case $1 in
+	       -r) shift
+	       	   REVERSE=1 ;;
+	       -p) shift
+	       	   PACKAGE=$1
+		   [ -z "$PACKAGE" ] && die "no package name given on -p option"
+		   shift ;;
+	       -P) shift
+	       	   val=$1; shift
+		   [ -z "$val" ] && die "no path specified on -P option"
+	       	   PATHLIST="$PATHLIST $val" ;;
+               -c) shift
+	       	   val=$1; shift
+		   [ -z "$val" ] && die "no path specified on -P option"
+		   COMPRESSION=$val ;;
+	       -v) VERBOSE=1
+		   shift ;;
+	       *)  val=$1; shift
+	       	   if [ $REVERSE -eq 0 ]
+		   then
+			if [ -z "$bad" ]
+		   	then
+			   bad=$val
+		   	else
+			   goodlist="$goodlist${val:+ }$val"
+                   	fi
+		   else
+		      goodlist="$goodlist $bad"
+		      bad=$val;
+		   fi
+		   ;;
+          esac
+       done
+       test_config "bz2"
+       [ -z "$goodlist" -o -z "$bad" ] && die "not enough init parameters"
+       tmp_save=$(bisect_save)
+       git bisect start --no-checkout $bad $goodlist ${PATHLIST:+--} $PATHLIST
+       create_archive $COMPRESSION $VERBOSE
+       create_config ${name}.bisect
+       bisect_restore $tmp_save
+       ;;
+     good|bad)
+       val=$1; shift
+       [ $i == '-v' ] && { VERBOSE=1; shift; } 
+       name=$1
+       [ -z "$name" ] && die "no name given for $val"
+       [ ! -e ${name}.bisect ] && die -n "bisect $name does not exist"
+       . ${name}.bisect
+       tmp_save=$(bisect_save)
+       git bisect reset
+       replay | git bisect replay /dev/stdin
+       val=$(fix_arg $val)
+       git bisect "$val" BISECT_HEAD
+       create_archive $COMPRESSION $VERBOSE
+       create_config ${name}.bisect
+       bisect_restore $tmp_save
+       ;;
+    *)
+       die "unknown command $1"
+       ;;
+esac
