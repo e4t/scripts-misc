@@ -1,0 +1,183 @@
+#! /bin/bash
+#set -x
+UPSTREAM_VERSION=master  #origin/drm-intel-nightly
+FLAVOR=all
+
+git_make_gitdir() {
+   local dir=$1
+   if [ -d $dir/.git ]
+   then
+	echo $dir/.git
+   elif [ -d $dir/objects -a -d $dir/refs ]
+   then
+   	echo $dir
+   fi
+}
+
+git_get_config() {
+   local gitdir="$1" config_tag="$2"
+   git --git-dir=$gitdir config --get $config_tag
+}
+
+git_get_version_of_id() {
+   local gitdir="$1" id="$2" version
+   git --git-dir=$gitdir describe $id --match "v*" | \
+   sed -e "s/^v\(.*\)/\1/"
+   
+}
+
+git_get_localbranch() {
+    local tmp
+    tmp=$(git branch | grep '\*')
+    echo ${tmp#* }
+}
+
+fix_rpmconfig() {
+   local url="$1" version="$2" topdir="$3"
+   local tmpfile file=$topdir/rpm/config.sh
+   tmpfile=$(mktemp /tmp/rpm-config.XXXXX)
+   cat $file | awk "
+       BEGIN {
+       	     url_printed=0;
+	     version_printed=0;
+       }
+       /SRCVERSION=.*/ {
+         print \"SRCVERSION=$version\";
+         version_printed=1;
+	 next;
+       }
+       /URL=.*/ {
+         print \"URL=$url\";
+	 url_printed=1;
+	 next;
+       }
+       {
+	 print;
+       }
+       END {
+       	   if (url_printed != 1) {
+	      print  \"URL=$url\";
+           }
+	   if (version_printed != 1) {
+              print \"SRCVERSION=$version\";
+	   }
+       }"  >> $tmpfile || return 1
+    mv $tmpfile $file || return 1
+    return 0
+}
+
+get_arch()
+{
+    local arch=$1
+    [ -z $arch ] && arch=$(uname -m)
+    case $arch in
+	i?86) arch=i386 ;;
+	aarch64) arch=arm64 ;;
+    esac
+    echo $arch
+}
+
+run_sequence_patch() {
+   local gitdir=$1 topdir=$2 flavor="$3" arch="$4" pwd
+   pwd=$(pwd)
+   case $flavor in
+       all) arg= ;;
+       vanilla) arg=--vanilla ;;
+       *) arch=$(get_arch $arch)
+	   $arg="--config=$arch-$flavor" ;;
+   esac
+   cd $topdir
+   LINUX_GIT=$gitdir $topdir/scripts/sequence-patch.sh $arg || return $?
+   cd $pwd
+}
+
+run_olddefconfig() {
+   local versiondir="$1" topdir="$2" flavor="$3" arch="$4" pwd
+   
+   pwd=$(pwd)
+   case $flavor in
+       all) arg=; dir_suffix= ;;
+       vanilla) arg="--vanilla"; dir_suffix="-vanilla" ;;
+       *) arg="--flavor $flavor"; dir_suffix= 
+	  arch=$(get_arch $arch)
+	  arg="${arg} ${arch:+-a }${arch}"
+	  ;;
+   esac
+   cd $topdir/tmp/linux-${versiondir}${dir_suffix}
+   $topdir/scripts/run_oldconfig.sh --olddefconfig $arg || return $?
+   cd $pwd
+}
+
+run_tarup() {
+   local flavor="$1" gitdir="$2" topdir="$3" arg="" pwd
+   [ $flavor == vanilla ] && arg="--vanilla"
+   pwd=$(pwd)
+   cd $topdir
+   LINUX_GIT=$gitdir $topdir/scripts/tar-up.sh $arg || return $?
+   cd $pwd
+}
+
+usage() {
+    local exit=$1
+    echo "$(basename $0) [-V <upstream_tag>|<upstream_version>|<upstream_branch>][-a <arch> -f <flavor>]|--vanilla] <upstream_src>"
+    echo "Options:"
+    echo -e "\t-V <upstream_tag>|<upstream_version>|<upstream_branch>: default: master"
+    echo -e "\t   Upstream version (either sha-1 or tag or HEAD of branch)"
+    echo -e "\t-a <arch>: use <arch> as architecture instead of current arch."
+    echo -e "\t-f <flavor>: explicitely use flavor <flavor> for sequence-patch.sh"
+    echo -e "\t--vanilla: prepare for vanilla flavor"
+    echo -e "\t<upstream_src>: patch to upstream directory"
+    exit $exit
+}
+
+die () {
+    local message=$1
+    local usage=0
+    [ "$message" == "-u" ] && { usage=1; shift; message=$1; }
+    echo "$message" >&2
+    $reset && git reset HEAD^
+    [ $usage -eq 1 ] && usage 1 1>&2
+    exit 1
+}
+
+reset=false
+
+while [ -n "$1" ]
+do
+    case $1 in
+	-h) usage 0;;
+	-V) shift; UPSTREAM_VERSION=$1; shift ;;
+	-f) shift; FLAVOR=$1; shift ;;
+	-a) shift; ARCH=$1; shift ;;
+	--vanilla) FLAVOR=vanilla ARCH=; shift ;;
+	-*) die -u "Unnkown option" ;;
+	*) UPSTREAM_SRC=$1; shift ;;
+    esac
+done
+
+[ -d ./rpm -a -d ./scripts/ -a -d config ] || die "not a SUSE kernel tree" >&2
+[ -z "$UPSTREAM_SRC" ] && die -u "No upstream source specified"
+[ -z "$arch" -a -n "$flavor" ] || [ -n "$arch" -a -z "$flavor" ] && die -u \
+    "<arch> and <flavor> need to be specified together"
+topdir=$(pwd)
+gitdir=$(git_make_gitdir $UPSTREAM_SRC)
+version=$(git_get_version_of_id $gitdir $UPSTREAM_VERSION)
+localbranch=$(git_get_localbranch)
+[ -z "$version" ] && die "Cannot get version of $UPSTREAM_VERSION head"
+url=$(git_get_config $gitdir remote.origin.url)
+[ -z "$url" ] && die "Cannot get upstream URL"
+git commit -a -m "Tmp" && reset=true
+fix_rpmconfig $url $version $topdir || die "Cannot fix rpm/config.sh"
+run_sequence_patch $UPSTREAM_SRC $topdir $FLAVOR $ARCH || die "Cannot apply patches"
+run_olddefconfig $version-$localbranch $topdir $FLAVOR $ARCH || die "Cannot update config files"
+run_tarup $FLAVOR $UPSTREAM_SRC $topdir
+$reset && git reset HEAD^
+echo -e "Now you can build the kernel running: ./scripts/osc_wrapper\n"\
+        "\t or upload by: ./scripts/osc_wrapper upload [--obs] <target_project>" 
+
+# Test build:
+# ./scripts/osc_wrapper
+# Upload:
+# ./scripts/osc_wrapper upload --obs home:eeich:kernel-intel
+# setup_kernel -f vanilla -V f5d413c /space/kernel-INTEL/drm-intel
+# ./scripts/osc_wrapper upload --obs home:eeich:kernel-test

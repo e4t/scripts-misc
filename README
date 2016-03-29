@@ -321,3 +321,23 @@ rpm-bisect command [options]
              bad  [-v] <name>
 
 Requires: core-utils, sed, git
+
+setup-kernel
+------------
+Create a source RPM from a kernel version from a git repo.
+Run from the top directory of a SUSE kernel repo will create a kernel-source
+directory with a kernel version specified on the command line from a
+specified git repo instead of using the kernel version specified.
+The script will use the specified config files and convert them to work
+with the specified kernel version.
+
+setup-kernel [-V <upstream_tag>|<upstream_version>|<upstream_branch>][-a <arch> -f <flavor>]|--vanilla] <upstream_src>
+Options:
+        -V <upstream_tag>|<upstream_version>|<upstream_branch>: default: master
+           Upstream version (either sha-1 or tag or HEAD of branch)
+        -a <arch>: use <arch> as architecture instead of current arch.
+        -f <flavor>: explicitely use flavor <flavor> for sequence-patch.sh
+        --vanilla: prepare for vanilla flavor
+        <upstream_src>: patch to upstream directory
+
+Requires: core-utils, sed, git, awk
