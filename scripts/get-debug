@@ -1,0 +1,174 @@
+#!/bin/bash
+#set -x
+
+arg=$1
+
+declare -i leap=0
+declare -i tumbleweed=0
+declare -i nonprod=0
+
+mv_index() {
+   mv $tmpdir/index.html $tmpdir/$1.html
+}
+
+die() {
+      echo $1 >&2
+      exit 1
+}
+
+help() {
+       echo "$0 -h | [ -a arch ] product package [ version ]"
+       echo "   -h help: display this text"
+       echo "   product: 13.2, 42.1, tumbleweed ..."
+       echo "   package: package name"
+       echo "	version: full package version (with arch"
+       echo "   NOTE: you need to specify either <arch> or <version>"
+}
+
+get_latest()
+{
+    local package=$1 arch=$2
+    shift; shift
+    local -a files=( "$@" )
+    local -a packages
+    local -i cnt=1
+    local newest
+    packages=( $(cat ${files[@]} | \
+	egrep "$package-[0-9]+\." | \
+	grep ${arch}.rpm  | \
+	sed "s#<[^>]*> <a href=[^>]\+>\([^<]\+\)</a>.*#\1#") )
+    newest="${packages[0]}"
+    while [ $cnt -lt ${#packages[@]} ]
+    do
+	echo ${packages[$cnt]} 1>&2
+	if zypper vcmp "$newest" "${packages[$cnt]}" | grep -q "is older than"
+	then
+	    newest=${packages[$cnt]}
+	fi
+	(( cnt++ ))
+    done
+    newest=${newest##${package}-}
+    newest=${newest%%.rpm}
+    echo $newest
+}
+
+get_source ()
+{
+    local rpm=$1
+    rpm -qip $rpm | grep Source | sed -e "s/.* //" -e "s/-[0-9]\+\.[^ ]*//"
+}
+
+case $arg in
+     -h|--help|-\?) help; exit ;;
+     -a) shift; arch=$1; shift ;;
+esac
+
+prod=$1
+package=$2
+version=$3
+
+if [ -z "$prod" -o -z "$package" ] || [ -n "$version" -a -n "$arch" ] || [ -z "$version" -a -z "$arch" ]
+then
+        help
+	die
+fi
+
+[ -z $arch ] && arch="${version##*.}"
+
+tmpdir=$(mktemp -d ./debug-XXXXXXX)
+WGET="wget -P $tmpdir"
+
+_prod=${prod%.*}
+if [[ "$_prod" =~ "/{0,1}repositories.*" ]]
+then
+   nonprod=1
+elif [ "${_prod,,*}" = "tumbleweed" ]
+then
+   prod=tumbleweed
+   tumbleweed=1
+elif [ $_prod -ge 42 ]
+then
+   prod=leap/$prod
+   leap=1
+fi
+
+if [ $nonprod -eq 1 ]
+then
+	base=$prod
+	base_debug=$base
+elif [ $tumbleweed -eq 1 ]
+then
+	base=/tumbleweed/repo/oss/suse/$arch/
+	base_debug=/tumbleweed/repo/debug/suse/$arch/
+else
+	base=/distribution/$prod/repo/oss/suse/$arch/
+	base_debug=/debug/distribution/$prod/repo/oss/suse/$arch/
+fi
+base=http://download.opensuse.org/${base}
+base_debug=http://download.opensuse.org//${base_debug}
+
+if [ $tumbleweed -eq 0 -a $nonprod -eq 0 ]
+then
+	update=/update/$prod/
+	update_debug=/debug/update/$prod/
+	if [ $leap -eq 1 ]
+	then
+		update=$update/oss
+		update_debug=$update_debug/oss
+	fi	
+	update=http://download.opensuse.org/$update/$arch/
+	update_debug=http://download.opensuse.org/$update_debug/$arch/
+
+	${WGET} $base 2>/dev/null && mv_index base
+	${WGET} $update 2>/dev/null && mv_index update
+	#${WGET} $base_debug 2>/dev/null && mv_index base_debug
+	#${WGET} $update_debug 2>/dev/null && mv_index update_debug
+	if [ -z "$version" ]
+	then
+	    version=$(get_latest $package $arch $tmpdir/base.html $tmpdir/update.html)
+	fi
+	if $(grep -q "$package-$version" $tmpdir/base.html)
+	then
+		${WGET} $base/$package-$version.rpm
+		${WGET} $base_debug/$package-debuginfo-$version.rpm
+		sourcepackage=$(get_source $tmpdir/$package-debuginfo-$version.rpm)
+		${WGET} $base_debug/$sourcepackage-debugsource-$version.rpm
+	elif $(grep -q "$package-$version" $tmpdir/update.html)
+	then
+		${WGET} $update/$package-$version.rpm
+		${WGET} $update_debug/$package-debuginfo-$version.rpm
+		sourcepackage=$(get_source $tmpdir/$package-debuginfo-$version.rpm)
+		${WGET} $update_debug/$sourcepackage-debugsource-$version.rpm
+	else
+		rm -rf $tmpdir
+		die "Package $package-$version not found in $prod"
+	fi
+else
+	if [ -z "$version" ]
+	then
+	    version=$(get_latest $package $arch $tmpdir/base.html)
+	fi
+	
+	if ! $(${WGET} $base/$package-$version.rpm &>/dev/null)
+        then
+		rm -rf $tmpdir
+	       	die "Package $package-$version not found in $prod"
+        fi
+	${WGET} $base_debug/$package-debuginfo-$version.rpm
+	sourcepackage=$(get_source $tmpdir/$package-debuginfo-$version.rpm)
+	${WGET} $base_debug/$sourcepackage-debugsource-$version.rpm
+fi
+
+mv $tmpdir/*.rpm .
+rm -rf $tmpdir
+for i in *.rpm; do rpm2cpio $i | cpio -id; done
+for i in $(find usr/lib/debug -type f); do mv $i ${i##usr/lib/debug/}; done
+
+## objdump --prefix=<directory> --prefix-strip=<level>
+## gdb: directory - add directory to search path
+
+#pwd=$(pwd)
+#cd $tmpdir
+#cd $pwd
+#echo $tmpdir
+

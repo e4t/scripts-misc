@@ -341,3 +341,19 @@ Options:
         <upstream_src>: patch to upstream directory
 
 Requires: core-utils, sed, git, awk
+
+get-debug
+---------
+Download package, debugsource and debuginfo for this package (for a given
+or the latest version for the specified product), unpack the rpms and copy
+debuginfo files into the binary/library subdirectories so they can be found
+easily by objdump and gdb.
+
+get-debug -h | [ -a arch ] product package [ version ]
+   -h help: display this text
+   product: 13.2, 42.1, tumbleweed ...
+   package: package name
+        version: full package version (with arch
+   NOTE: you need to specify either <arch> or <version>
+
+Requires: wget, rpm, zypper, cpio, grep, sed
