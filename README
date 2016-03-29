@@ -357,3 +357,18 @@ get-debug -h | [ -a arch ] product package [ version ]
    NOTE: you need to specify either <arch> or <version>
 
 Requires: wget, rpm, zypper, cpio, grep, sed
+
+tarup-version
+-------------
+Create a compressed tar archive of a given or current version of a git
+repo and place the result in the dirctory specified.
+
+tarup-version [-v][-c <compression>][-r <sha1>][-p package] targetdir
+Options:
+        -v: verbose - print package & version
+        -c <compression> set archive compression. Default: bz2
+        -r <sha1> set version id. Default: HEAD
+        -p package: name of package. Default: name of git directory
+        targetdir: directory to put archive
+
+Requires: git, sed

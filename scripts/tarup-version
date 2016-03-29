@@ -1,0 +1,61 @@
+#! /bin/bash
+#set -x
+get_version() {
+    local sha1=$1 version
+    version=$(git describe $sha1 2>/dev/null) || return 1
+    echo $version | sed -e "s/-/./" -e  "s/-/_/"
+}
+
+create_archive() {
+    local package=$1 version=$2 sha1=$3 target=$4 compression=$5
+
+    git archive --format=tar.$compression --prefix=$package-$version/ \
+	-o $target/$package-$version.tar.$compression $sha1
+}
+
+usage() {
+    echo "$(basename $0) [-v][-c <compression>][-r <sha1>][-p package] targetdir"
+    echo "Options:"
+    echo -e "\t-v: verbose - print package & version"
+    echo -e "\t-c <compression> set archive compression. Default: bz2"
+    echo -e "\t-r <sha1> set version id. Default: HEAD"
+    echo -e "\t-p package: name of package. Default: name of git directory"
+    echo -e "\ttargetdir: directory to put archive"
+}
+
+die() {
+    local msg=$1
+    echo -e "$msg" >&2
+    exit 1
+}
+
+compression=bz2
+sha1=HEAD
+verbose=false
+package=$(basename $(git rev-parse --show-toplevel)) || die "Not git repo"
+
+while [ -n "$1" ]
+do
+    case $1 in
+	-v) verbose=true; shift ;;
+	-c) shift; compression=$1; shift ;;
+	-r) shift; sha1=$1; shift ;;
+	-p) shift; package=$1; shift ;;
+	-*) usage; exit 0;;
+	*)
+	    if [ -z "$target" ]
+	    then
+		target=$1;
+	    else
+		usage; exit 1;
+	    fi
+	    shift ;;
+    esac
+done
+[ -z "$target" ] && { usage; exit 1; }
+version=$(get_version $sha1) || die "sha1 $sha1 doesn't exist"
+create_archive $package $version $sha1 $target $compression || die "Cannot create archive"
+
+$verbose && echo $package-$version
+
+exit 0
