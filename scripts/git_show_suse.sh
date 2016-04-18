@@ -473,8 +473,8 @@ do
 	signedoff=
 	filter="suse_filter "'"'$myid'"'
     fi
-    [ -n "$git_repo_tag" ] && \
-	is_upstream_repo "$(get_git_repo)" $NON_UPSTREAM_SIGNATURES && \
+#    [ -n "$git_repo_tag" ] && \
+    is_upstream_repo "$(get_git_repo)" $NON_UPSTREAM_SIGNATURES && \
 	commit_id="Git-commit: %H%n"
     command="git --no-pager show  ${relative:+--relative=}${relative} --stat -p $i --pretty=format:\"From: %an <%ae>%nDate: %ad%nSubject: ${subjprefix}%s%nPatch-mainline: ${mainline}%n${git_repo_tag}${commit_id}References: ${references}%n${signedoff}%n%b\""
     if [ -n "$filename" ]
