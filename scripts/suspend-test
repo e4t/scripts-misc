@@ -17,28 +17,34 @@ die()
 
 usage()
 {
-    echo -en "$(basename $0) [-h] [-s <sleep_delay>] [-w <wakeup_delay>]\n"
+    echo -en "$(basename $0) [-h] [-s <sleep_delay>] [-w <wakeup_delay>] [-c <cycles>]\n"
     echo -en "Options:\n"
     echo -en "\t-h: hibernate (default: suspend)\n"
-    echo -en "\t-w <wakeup_delay>: set delay between suspend and wakeup (default 15 sec)\n"
-    echo -en "\t-s <suspend_delay>: set delay before suspend (defaut 8 sec)\n"
+    echo -en "\t-s <suspend_delay>: set delay before suspend (defaut $SLDELAY sec)\n"
+    echo -en "\t-w <wakeup_delay>: set delay between suspend and wakeup (default $WKDELAY sec)\n"
+    echo -en "\t-c <cycles>: number of cycles to run\n"
     echo -en "\t-h: usage\n"
 }
+
+sldelay=$SLDELAY
+wkdelay=$WKDELAY
 while test -n "$1"
 do
     case "$1" in
 	-H) shift; SLEEP=hibernate ;;
-	-s) shift SLDELAY=$1; shift ;;
-	-w) shift; WKDELAY=$i; shift ;;
+	-s) shift sldelay=$1; shift;
+	    [ -z "$sldelay" ] || [[ "$sldelay" =~ ^-.* ]] && \
+		die "no argument specified with -s option" ;;
+	-w) shift; wkdelay=$i; shift;
+	    [ -n  "$wkdelay" ]  || [[ "$wkdelay" =~ ^-.* ]] && \
+		die "no argument specified with -w option" ;;
+	-c) shift; cycles=$1; shift;
+	    [ -n  "$cycles" ]  || [[ "$cycles" =~ ^-.* ]] && \
+		die "no argument specified with -c option" ;;
 	-h|-?|--help) usage; exit 0 ;;
 	*) die "Unknown option" ;;
     esac
 done
-
-[ -z "$SDELAY" ] || [[ "$SDELAY" =~ ^-.* ]] && \
-    die "no argument specified with -s option"
-[ -n  "$WKDELAY" ]  || [[ "$WDELAY" =~ ^-.* ]] && \
-    die "no argument specified with -w option"
 
 test -r /sys/class/rtc/rtc0/since_epoch || die "cannot get time"
 test -w /sys/class/rtc/rtc0/wakealarm || die "cannot set wakeup"
@@ -64,14 +70,16 @@ fi
 
 while true
 do
-	test -e $tmpfl || { echo -n "$SLEEP cycles:"; cat $STMP; exit 0; }
 	cnt=$(( $cnt + 1 ))
 	secs=$(cat /sys/class/rtc/rtc0/since_epoch)
-	wkup=$(( $secs + $WKDELAY ))
+	wkup=$(( $secs + $wkdelay ))
 	echo  0 > /sys/class/rtc/rtc0/wakealarm || die "Cannot reset wakeup"
 	echo  $wkup > /sys/class/rtc/rtc0/wakealarm || die "Cannot set wakeup"
 	sleep 1
 	$sleepcmd
 	echo -en "$cnt \n" > $STMP
-	sleep $SLDELAY
+	test -e $tmpfl || { echo -n "$SLEEP cycles:"; cat $STMP; exit 0; }
+	[ -n "$cycles" ] && [ $cnt -eq $cycles ] && \
+	    { echo -n "$SLEEP cycles:"; cat $STMP; exit 0; }
+	sleep $sldelay
 done

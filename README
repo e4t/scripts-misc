@@ -377,13 +377,15 @@ suspend-test
 ------------
 Cycle test suspend resume: on each cycle wait a configurable amount of time,
 set wakeup time with a configurable delay, suspend (or hibernate).
-To terminate, remove specified file in /dev/shm/.
+To terminate, remove specified file in /dev/shm/. Optionally slecify maximum
+number of cycles to run on the command line.
 
-suspend-test [-h] [-s <sleep_delay>] [-w <wakeup_delay>]
+suspend-test [-h] [-s <sleep_delay>] [-w <wakeup_delay>] [-c <cycles>]
 Options:
         -h: hibernate (default: suspend)
         -w <wakeup_delay>: set delay between suspend and wakeup (default 15 sec)
         -s <suspend_delay>: set delay before suspend (defaut 8 sec)
+	-c <cycles>: number of cycles to run (default: indefinite)
         -h: usage
 
 Requires: coreutils, systemd or pm-utils
