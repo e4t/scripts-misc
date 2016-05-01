@@ -119,10 +119,10 @@ fi
 
 [ "${specfile%%.spec}" = "${specfile}" ] && specfile="${specfile%%.}.spec"
 
-create_gitignore=$(which create_gitignore 2>/dev/null)
+create_gitignore=$(which create-gitignore 2>/dev/null)
 if  [ -z "$create_gitignore" ]
 then
-    echo "create_gitignore not in path!"
+    echo "create-gitignore not in path!"
     create_gitignore=":"
     sleep 5;
 fi

@@ -389,3 +389,14 @@ Options:
         -h: usage
 
 Requires: coreutils, systemd or pm-utils
+
+create-gitignore
+----------------
+Supplement script to rpm-git, creates a gitignore file containing generated
+autotool files like Makefile.in or configure.in.
+It searches for the top of the git tree and puts the ignore list into
+.git/info/exclude.
+
+No command line options, no help available.
+
+Requires: coreutils, findutils, sed

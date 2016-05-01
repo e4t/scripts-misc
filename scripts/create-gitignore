@@ -1,0 +1,52 @@
+#! /bin/sh
+
+#set -x
+
+die() {
+    echo $1 >&2
+    exit 1
+}
+
+goto_top() {
+    mydir=$(pwd)
+    while ! test -d .git
+    do
+	cd ..
+	thisdir=$(pwd)
+	if [ "$thisdir" == "/" ]
+	then
+	    cd $mydir
+	    return 1
+	fi
+    done
+    return 0
+}
+
+ignorefile=.git/info/exclude
+
+goto_top || die "No git directory!"
+
+cat >> $ignorefile <<EOF
+*.orig
+*.rej
+*~
+EOF
+
+for configure_ac in $(find . -name configure.ac)
+do
+	files="$(grep AC_CONFIG_HEADERS $configure_ac | head -1 | sed -e "s#AC_CONFIG_HEADERS(\[*\(.*\)\]*\( *,.*\| *\))#\1#")"
+	dir=${configure_ac%/*}
+	dir=${dir#\./}
+	for i in $files
+	do
+	    echo "$dir/${i}.in" >> $ignorefile
+	done
+	echo -en "$dir/configure\n$dir/config.*\n" >> $ignorefile
+done
+
+for makefile_am in $(find . -name Makefile.am)
+do
+	dir=${makefile_am%/*}
+	dir=${dir#\./}
+	echo "$dir/Makefile.in" >> $ignorefile
+done
