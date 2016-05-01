@@ -1,0 +1,128 @@
+#!/bin/sh
+#set -x
+
+DELIMITER=_
+optlist=
+optlist_tail=
+project=
+checkout=0
+add_dir=0
+
+IBS=https://api.suse.de
+OBS=https://api.opensuse.org
+
+if [ "$(basename $0)" = "iosc-wrapper" ]
+then
+    apiopt="-A $IBS"
+else
+    apiopt="-A $OBS"
+fi
+
+while [ -n "$1" ]
+do
+        package=
+	case $1 in
+	    -A)
+		optlist="$optlist $1 $2"
+		apiopt=
+		shift; shift
+		;;
+	    -c)
+		optlist="$optlist $1 $2"
+		shift; shift
+		;;
+	    -*)
+		optlist="$optlist $1"
+		shift
+		;;
+	    checkout|co)
+		checkout=1
+		add_dir=1
+		optlist="$optlist $1"
+		shift
+		break
+		;;
+	    *)
+		break
+		;;
+	esac
+done
+
+optlist="$apiopt $optlist"
+
+if [ $checkout -eq 1 ]
+then
+    while [ -n "$1" ]
+    do
+	package=
+	case $i in
+	    -o)
+		add_dir=0
+		optlist_tail="$optlist_tail $1 $2"
+		shift; shift
+		;;
+	    --output-dir*)
+		add_dir=0
+		optlist_tail="$optlist_tail $1"
+		shift;
+		;;
+	    -l|-r)
+		optlist_tail="$optlist_tail $1 $2"
+		shift; shift
+		;;
+	    -*)
+		optlist_tail="$optlist_tail $1"
+		shift;
+		;;
+	    *)
+		if [ -z $project ]
+		then
+		    project="$1"
+		    if [[ "$pro" =~ "/" ]]
+		    then
+			package=${project##*/}
+			project=${project%%/*}
+		    fi
+		else
+		    package="$1"
+		fi
+		optlist_tail="$optlist_tail $1"
+		shift;
+		;;
+	esac
+    done
+else
+    optlist="$optlist $@" 
+fi
+
+if [ -n "$project" -a -z "$package" ] && \
+    [[ "$project" =~ .+/.*+ ]]
+then
+    package=${project##*/}
+    project=${project%/*}
+fi
+
+if [ $add_dir -eq 1 ]
+then
+    dir=${project//:/$DELIMITER}${package:+/}$package
+#    if [ -n "$package" ] 
+#    then
+	add_arg="-o $dir"
+#    else
+#	add_arg="-c $dir"
+#    fi
+    test -d "$dir" || mkdir -p "$dir"
+fi
+
+optlist="$optlist $add_arg $optlist_tail"
+echo $optlist
+if [ -n "$package" ] # This will hopefully go away soon!
+then
+    exec /usr/bin/osc $optlist
+else
+    /usr/bin/osc $optlist
+    ret=$?
+    [ $ret -eq 0 ] && { mv $project/* $dir && mv $project/.osc $dir && rmdir $project; }
+    echo $dir
+    exit $ret
+fi

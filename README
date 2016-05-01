@@ -400,3 +400,12 @@ It searches for the top of the git tree and puts the ignore list into
 No command line options, no help available.
 
 Requires: coreutils, findutils, sed
+
+osc-wrapper
+-----------
+Wrapper for osc to automatically replace ':' with '_' in 'osc checkout's.
+When called as iosc_wrapper, it adds the innerweb API URL.
+
+Transparent wrapper, no extra help available.
+
+Requires: coreutils, osc ;-)
