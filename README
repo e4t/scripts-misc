@@ -409,3 +409,19 @@ When called as iosc_wrapper, it adds the innerweb API URL.
 Transparent wrapper, no extra help available.
 
 Requires: coreutils, osc ;-)
+
+create-tarball-from-git
+-----------------------
+
+Create a tarball from a git repo with correct version number in its name
+and top directory.
+
+create-tarball-from-git [-v <version>] [-d <outdir>] [-c <compression>] | [-h]
+     Creaqte a tarball from HEAD or a given version of a git repo.
+     Options:
+          -v <version>: git version to use. default: HEAD
+          -d <outdir>:  directory to place file. default: 
+          -c <compression>: comression to use. Vaild are:
+                            gz, Z, bz2, xz, lzma, zip. default: bz2.
+
+Requires: coreutils, git
