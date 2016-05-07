@@ -429,6 +429,8 @@ do_installmodules()
 
 do_installkernel()                                                         # {{{
 {
+    local moddir makeinitrd=false
+
     if [ "$COPYIMAGE" = "${orig}vmlinuz" ] ; then
         if [ -f "${orig}vmlinux.gz" ] ; then
             mv ${orig}vmlinux.gz ${orig}vmlinuz
@@ -478,33 +480,41 @@ do_installkernel()                                                         # {{{
 
     if [ "$nomodule" = 0 ] ; then
         echo "Installing modules"
+
+	if [ $strip -eq 1 ]
+	then
+	    stripvar="INSTALL_MOD_STRIP=1"
+	else
+	    unset stripvar
+	fi
+
         if [ -z "$REMOTEHOST" ] ; then
             echo $SUDO make $inst_arch $inst_orig modules_install
-            $SUDO make $inst_arch $inst_orig modules_install
+            $SUDO make $inst_arch $inst_orig $stripvar modules_install
         else
 	    set -x
-	    tmpdir=$(mktemp -d $MODULEINSTALLDIR/tmp-XXXXXXXX) || die "cannot create tempdir"
-	    if [ $strip -eq 1 ] 
-	    then
-		stripvar="INSTALL_MOD_STRIP=1"
-	    else
-		unset stripvar
-	    fi
-            make $inst_arch ${par:+-j ${par}} $inst_orig $stripvar INSTALL_MOD_PATH=$tmpdir modules_install || exit 1
+	    moddir=$(mktemp -d $MODULEINSTALLDIR/tmp-XXXXXXXX) || \
+		die "cannot create tempdir"
+            make $inst_arch ${par:+-j ${par}} $inst_orig $stripvar \
+		INSTALL_MOD_PATH=$moddir modules_install || exit 1
 	    set +x
-            cd $tmpdir/lib/ || exit 1
-	    tar -cvjf - * | $CMD tar -C /lib -xjf -
-	    $CMD depmod -aq
+        fi
+	makeinitrd=true
+    fi
+
+    if [ -n "$moddir" ]
+    then
+	cd $moddir/lib/ || exit 1
+	tar -cvjf - * | $CMD tar -C /lib -xjf -
+	$CMD depmod -aq
 #            tar cvfj modules.tar.bz2 *
 #            scp -C modules.tar.bz2 root@$REMOTEHOST:/lib
 #            cd -
 #            $CMD "tar xvfj /lib/modules.tar.bz2 -C /lib/; rm /lib/modules.tar.bz2 ; depmod -aq"
-            rm -fr $tmpdir
-        fi
-
-	make_initrd $VERSION
-	$grubonce && run_grubonce $VERSION
+        rm -fr $moddir
     fi
+
+    $makeinird  && { make_initrd $VERSION; $grubonce && run_grubonce $VERSION; }
 
     echo "New kernel version $VERSION installed."
     if [ "$BOOTCONFIG" != "none" ]
