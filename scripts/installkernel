@@ -116,6 +116,13 @@ while getopts nbhflslsiOo:m:a:j: name ; do
 done
 shift $(($OPTIND -1))
 
+# If a makefile wrapper is used to set the build dir, try to obtain $orig
+if [ -z "$orig" ]
+then
+    tmp=$(make $inst_orig kernelrelease | grep "Entering directory")
+    [ -n "$tmp" ] && tmp=${tmp##*\`} && orig=${tmp%\'*}
+fi
+
 $grubonce && \
     test "$initrd" = 0 -a \( -n "$modules_to_install" -o "$nomodule" -eq 0 \) && \
     die "option -O only makes sense when rebuilding intrd"
