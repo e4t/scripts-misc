@@ -313,7 +313,7 @@ find_version()
         VERSION="$(/usr/bin/get_kernel_version ${kernel})"
     fi
     if test -z "$VERSION" || echo "$VERSION" |grep invalid; then
-	VERSION=$(make $inst_arch $inst_orig kernelrelease)
+	VERSION=$(make -s $inst_arch $inst_orig kernelrelease)
     fi
 
     echo $VERSION
@@ -402,7 +402,7 @@ do_installmodules()
     for i in $modules_to_install
     do
 	echo "Installing $i"
-	if [ $strip -eq 1 ] 
+	if [ $strip -eq 1 ]
 	then
 	    copy=${orig}$i.strip
 	    cp ${orig}$i $copy
@@ -467,7 +467,6 @@ do_installkernel()                                                         # {{{
 	$SUDO $COPYCMD ${orig}vmlinux /boot/vmlinux-$VERSION
     fi
 
-    echo FOO $COPYIMAGE
     if [ -r "$COPYIMAGE" ] ; then
         echo "Copying $COPYIMAGE to /boot/$IMAGE-$VERSION"
         $SUDO $COPYCMD $COPYIMAGE /boot/$IMAGE-$VERSION
