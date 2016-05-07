@@ -529,14 +529,17 @@ do_removekernel()                                                          # {{{
     set -x
     # remove files in /boot
     $SUDO $RMCMD /boot/vmlinux-$VERSION
+    $SUDO $RMCMD /boot/vmlinux-$VERSION.gz
     $SUDO $RMCMD /boot/vmlinuz-$VERSION
     $SUDO $RMCMD /boot/System.map-$VERSION
+    $SUDO $RMCMD /boot/config-$VERSION
     if (( $initrd )) ; then
         $SUDO $RMCMD /boot/initrd-$VERSION
     fi
 
     if [ "$nomodule" = 0 ] ; then
         $SUDO $RMCMD /lib/modules/$VERSION
+        $SUDO $RMCMD /lib/firmware/$VERSION
     fi
     set +x
     echo "New kernel version $VERSION removed."
