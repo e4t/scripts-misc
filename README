@@ -69,6 +69,8 @@ Options
    -j <n>: parallelize actions that can be parallelized
    -l:  use lilo
    -s:  strip kernel/modules
+   -O:  set a one time boot entry to the newly installed kernel 
+   	(like grub(2-)once).
 
 Description:
 'installkernel' installs the entire kernel (optionally without modules) 
@@ -92,6 +94,9 @@ Otherwise, 'make install' will attempt to recreate the kernel configuration.
 '-f' runs the command in non-interactive mode, ie all user queries are
 suppressed.
 '-l' uses 'lilo' instead of 'grub' on x86_64 and i386 platforms.
+'-O' creates a one time boot entry for grub(2) for the newly created kernel.
+This option is only allowed when installkernel is run when the initrd is 
+rebuild as well.
 
 'removekernel' does the opposite ie delete a specific kernel. If no 
 version is specified it will remove the default kernel - ie the one

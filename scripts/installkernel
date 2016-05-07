@@ -37,7 +37,7 @@ fi
 [ -z "$MODULETMPDIR" ] && MODULETMPDIR=$TMPDIR
 
 bootloader=0
-nomodule=
+nomodule=0
 dont_ask=0
 lilo=0
 strip=0
@@ -48,8 +48,9 @@ inst_orig=""
 orig=""
 IMAGE="vmlinuz"
 modules_to_install=""
+grubonce=false
 
-while getopts nbhflsio:m:a:j: name ; do
+while getopts nbhflslsiOo:m:a:j: name ; do
     case $name in
 	m)
 	    modules_to_install="$modules_to_install $OPTARG"
@@ -76,6 +77,8 @@ while getopts nbhflsio:m:a:j: name ; do
 	s)
 	    strip=1
 	    ;;
+	O)  grubonce=true
+	    ;;
 	a)
 	    inst_arch="ARCH=$OPTARG"
 	    echo "Installing for architecture: $OPTARG"
@@ -91,8 +94,8 @@ while getopts nbhflsio:m:a:j: name ; do
 	    orig="$OPTARG/"
 	    ;;
         h|?)
-            echo "Usage     installkernel [-o <builddir>] [-a <arch>] [-l] [-f] [-i] [-n] [-s] [-j <n>] [hostname]"
-	    echo "          installkernel [-o <builddir>] [-a <arch>] [-i] [-s] -m \"module_list\" [hostname]"
+            echo "Usage     installkernel [-o <builddir>] [-a <arch>] [-l] [-f] [-i] [-O] [-n] [-s] [-j <n>] [hostname]"
+	    echo "          installkernel [-o <builddir>] [-a <arch>] [-i] [-s] [-O] -m \"module_list\" [hostname]"
             echo "          removekernel [-l] [-n] [-f] [-i] [<version>] [hostname]"
             echo
             echo "Options"
@@ -107,10 +110,16 @@ while getopts nbhflsio:m:a:j: name ; do
 	    echo "   -j <n>: parallelize actions that can be parallelized"
 	    echo "   -l:  use lilo"  
 	    echo "   -s:  strip kernel/modules"
+	    echo "   -O:  set a one time boot entry to the newly installed kernel (like grub(2-)once)."
             exit 1
     esac
 done
 shift $(($OPTIND -1))
+
+$grubonce && \
+    test "$initrd" = 0 -a \( -n "$modules_to_install" -o "$nomodule" -eq 0 \) && \
+    die "option -O only makes sense when rebuilding intrd"
+
 
 PROG=$(basename $0)
 if [ $PROG = "installkernel" ] ; then
@@ -312,6 +321,31 @@ make_initrd()
     fi
 }
 
+run_grubonce()
+{
+    local version=$1 i
+    if $CMD test -e /boot/grub/menu.list -a -x /usr/sbin/grubonce
+    then
+	$SUDO $CMD /usr/sbin/grubonce 0
+	echo "Setting next grub boot entry to 0"
+    elif $CMD test -e /boot/grub2/grub.cfg -a -x /usr/sbin/grub2-once
+    then
+	# would be nice if we could simply use grub2-once <stringID>
+	# but it cannot distinguish between linux-<version> and linux-<version>+
+	OFS=$IFS
+	IFS="
+"
+	a=($(/usr/sbin/grub2-once --list | grep -E "$version($| )"))
+	IFS=$OFS
+	# simply pick the first entry
+	b=(${a[0]})
+	/usr/sbin/grub2-once ${b[0]}
+	echo "Setting next grub2 boot entry to ${b[0]}"
+    else
+	die "neither grub nor grub2 found"
+    fi
+}
+
 make_dumprd()
 {
     if (( $dumprd )) ; then
@@ -378,6 +412,7 @@ do_installmodules()
     if [ $initrd -eq 1 ]
     then
 	make_initrd
+	$grubonce && run_grubonce $VERSION
     fi
     if [ $dumprd -eq 1 ]
     then
@@ -434,7 +469,7 @@ do_installkernel()                                                         # {{{
     echo "Copy config to /boot/config-$VERSION"
     $SUDO $COPYCMD ${orig}.config /boot/config-$VERSION
 
-    if [ -z "$nomodule" ] ; then
+    if [ "$nomodule" = 0 ] ; then
         echo "Installing modules"
         if [ -z "$REMOTEHOST" ] ; then
             echo $SUDO make $inst_arch $inst_orig modules_install
@@ -461,6 +496,7 @@ do_installkernel()                                                         # {{{
         fi
 
 	make_initrd $VERSION
+	$grubonce && run_grubonce $VERSION
     fi
 
     echo "New kernel version $VERSION installed."
@@ -492,7 +528,7 @@ do_removekernel()                                                          # {{{
         $SUDO $RMCMD /boot/initrd-$VERSION
     fi
 
-    if [ -z "$nomodule" ] ; then
+    if [ "$nomodule" = 0 ] ; then
         $SUDO $RMCMD /lib/modules/$VERSION
     fi
     set +x
