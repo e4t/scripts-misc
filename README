@@ -234,6 +234,7 @@ Options:
 	     or set the BUILDENV environment variable
 	  -l: start interactive shell in local home directory.
 	  -i: info only: print buildroot directory.
+	  -e <ENV>: add environment setting ENV to command. <ENV> must be of the form FOO=BAR.
 	  <command>: run <command> in current directory but in build environment.
 If run without command, start interactive shell in current directory.
 use BUILDEXTRADIRS to specify extra directories to include in build environment.
@@ -245,7 +246,11 @@ environment variable.
       in the chroot.
 '-i': Just liste the name of the chroot.
 '<command>': execute <command> in the chroot. This can be used to build
-in a build environment that is different from the host system.
+      in a build environment that is different from the host system.
+'-e': specify an environment that is to be set in the chrooted environment
+      before the command gets executed. Use the form FOO=BAR, if this contains
+      spaces, quote the entire string.
+
 
 Requires: coreutils, sudo, grep, util-linux
 

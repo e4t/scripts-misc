@@ -19,6 +19,7 @@ usage() {
     echo -e "\t  or set the BUILDENV environment variable"
     echo -e "\t-l: start interactive shell in local home directory."
     echo -e "\t-i: info only: print buildroot directory."
+    echo -e "\t-e <ENV>: add environment setting ENV to command. <ENV> must be of the form FOO=BAR."
     echo -e "\t<command>: run <command> in current directory but in build environment."
     echo -e "If run without command, start interactive shell in current directory."
     echo -e "use BUILDEXTRADIRS to specify extra directories to include in build environment."
@@ -76,6 +77,8 @@ do_root=0
 
 cmd=$0
 cmdargs="${1+\"$@\"}"
+declare -a env
+declare -i env_i=0
 
 while [ -n "$1" ]
 do
@@ -86,6 +89,7 @@ do
 	    case $cmd in
 		-l)
 		    starthome=1 ;;
+		-e) env[$env_i]=$1; env_i=$(( $env_i + 1 )); shift ;;
 		-s)
 		    system="$1"
 		    shift
@@ -213,6 +217,12 @@ else
 cd \$1
 trap "test -n \"\\\$_PID\" && kill -15 \\\$_PID" EXIT
 set -x
+EOF
+    for (( i=0 ; $i - ${#env[@]} ; i++))
+    do
+	echo "export ${env[$i]}" >> $tmpfile
+    done
+    cat >> $tmpfile <<EOF
 $runcommand &
 set +x
 _PID=\$!
