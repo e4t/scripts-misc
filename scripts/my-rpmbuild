@@ -162,7 +162,7 @@ exec_build () {
 		    --define \"_topdir $topdir\"\
 			--buildroot \"$buildrootdir\" \
                     --define \"_specdir $specdir\" $specfile"
-	    localbuild.sh ${buildenv:+-s} $buildenv $command
+	    localbuild.sh -e HOME=/home/abuild ${buildenv:+-s} $buildenv $command
 	else
 	    die "localbuild.sh not found."
 	fi
