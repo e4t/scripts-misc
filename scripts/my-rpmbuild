@@ -124,10 +124,10 @@ canonicalize_specfile()
 }
 
 exec_build () {
-    local builddir buildopt specfile
+    local builddir buildopt specfile withargs
 
     buildopt=$2
-    specfile=$3
+    specfile=$4
 
     builddir=$1
     sourcedir=$specdir #$thisdir
@@ -136,6 +136,8 @@ exec_build () {
     rpmdir=$thisdir/.RPMS
     srcrpmdir=$thisdir/.SRPMS
     #  specdir=$specdir
+
+    withargs="$3"
 
     mkdir -p $buildrootdir $rpmdir $srcrpmdir
 
@@ -161,7 +163,7 @@ exec_build () {
                     --define \"_buildrootdir $buildrootdir\"\
 		    --define \"_topdir $topdir\"\
 			--buildroot \"$buildrootdir\" \
-                    --define \"_specdir $specdir\" $specfile"
+                    --define \"_specdir $specdir\" ${withargs} $specfile"
 	    localbuild.sh -e HOME=/home/abuild ${buildenv:+-s} $buildenv $command
 	else
 	    die "localbuild.sh not found."
@@ -262,7 +264,8 @@ do_build ()  {
     build_in_src=$1
     srcdir=$2
     buildopt=$3
-    specfile=$4
+    withargs="$4"
+    specfile=$5
 
     buildopt="--short-circuit $buildopt"
     if [ "$build_in_src" = "0" ]
@@ -278,13 +281,14 @@ do_build ()  {
 	path_is_absolute $srcdir || srcdir="$thisdir/$srcdir"
 	builddir=$srcdir
     fi
-    exec_build $builddir "$buildopt" $specfile
+    exec_build $builddir "$buildopt" "$withargs" $specfile
 }
 
 do_local_build () {
     local buildopt specfile
     buildopt=$1
-    specfile=$2
+    withargs="$2"
+    specfile=$3
     if [[ "$buildopt" == *-bp* ]]
     then
 	die "buildopt -bp doesn't make sense with local directory"
@@ -293,14 +297,15 @@ do_local_build () {
 	die "buildopt $buildopt not allowed for build in local directory"
     fi
     buildopt="--short-circuit $buildopt"
-    exec_build $thisdir "$buildopt" $specfile
+    exec_build $thisdir "$buildopt" "$withargs" $specfile
 }
 
 test_build_opts_do_build () {
     local buildopt build_in_src specfile
     buildopt=$1
     build_in_src=$2
-    specfile=$3
+    withargs="$3"
+    specfile=$4
 
     if [[ "$buildopt" == +(-bp|-bi|-bc|-bb) ]]
     then
@@ -308,22 +313,22 @@ test_build_opts_do_build () {
 	if [ -d $srcdir ]
 	then
 	    # a subdirectory with the unpacked sources exists
-	    do_build $build_in_src ./$srcdir "$buildopt" $specfile
+	    do_build $build_in_src ./$srcdir "$buildopt" "$withargs" $specfile
 	else
 	    # if possible, create a subdirectory with the unpacked sources
 	    if test -z "$nogit" && which rpm-git &> /dev/null
 	    then
 		# we can create a subdirectory with unpacked sources
 		rpm-git $target $specfile || die "rpm-git failed"
-		do_build $build_in_src ./$srcdir "$buildopt" $specfile
+		do_build $build_in_src ./$srcdir "$buildopt" "$withargs" $specfile
 	    else
 		# just build, don't bother to create a separate src dir
-		exec_build $thisdir/.build "$buildopt" $specfile
+		exec_build $thisdir/.build "$buildopt" "$withargs" $specfile
 	    fi
 	fi
     else
 	# just build, don't bother to create a separate src dir
-	exec_build $thisdir/.build "$buildopt" $specfile
+	exec_build $thisdir/.build "$buildopt" "$withargs" $specfile
     fi
 }
 
@@ -347,6 +352,7 @@ do
        -y) yes=1 ;;
        -l) localbuild=1 ;;
        -s) build_in_src=1 ;;
+       --with*) $withargs="$withargs $cmd";;
        *-h*) usage; exit 0 ;;
        *) specfile=$cmd ;;
    esac
@@ -397,14 +403,14 @@ then
 	if [ -e ${specfile%%.spec}.changes ]
 	then
 	    # $specdir contains rpm sources
-	    test_build_opts_do_build "$buildopt" $build_in_src $clean_specfile
+	    test_build_opts_do_build "$buildopt" $build_in_src "$withargs" $clean_specfile
 	else
 	    # assume: current dir contains a buildable tree
-	    do_local_build "$buildopt" $clean_specfile
+	    do_local_build "$buildopt" "$withargs" $clean_specfile
 	fi
     else
 	# assume: current dir contains a buildable tree
-	do_local_build "$buildopt" $clean_specfile
+	do_local_build "$buildopt" "$withargs" $clean_specfile
     fi
 else
     # no specfile given: current dir contains rpm sources
@@ -413,7 +419,7 @@ else
     clean_specfile=$(sanitize_specfile $specfile)
     check_buildrequires $clean_specfile $(get_builddir $buildenv) \
 	|| die "Buildrequires not satisfied"
-    test_build_opts_do_build "$buildopt" $build_in_src $clean_specfile	
+    test_build_opts_do_build "$buildopt" $build_in_src "$withargs" $clean_specfile
 fi
 
 clean
