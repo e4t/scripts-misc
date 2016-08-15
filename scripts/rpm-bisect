@@ -161,7 +161,7 @@ case $1 in
        ;;
      good|bad)
        val=$1; shift
-       [ $i == '-v' ] && { VERBOSE=1; shift; } 
+       [ $1 = '-v' ] && { VERBOSE=1; shift; } 
        name=$1
        [ -z "$name" ] && die "no name given for $val"
        [ ! -e ${name}.bisect ] && die -n "bisect $name does not exist"
