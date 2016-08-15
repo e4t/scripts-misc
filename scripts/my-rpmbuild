@@ -149,6 +149,7 @@ exec_build () {
 	    --define "_builddir $builddir" \
 	    --define "_buildrootdir $buildrootdir" \
 	    --define "_topdir $topdir" \
+	    --define "_rel 0" \
 	    --buildroot "$buildrootdir" \
 	    --define "_specdir $specdir" $specfile
     else
@@ -162,6 +163,7 @@ exec_build () {
                     --define \"_builddir $builddir\"\
                     --define \"_buildrootdir $buildrootdir\"\
 		    --define \"_topdir $topdir\"\
+                    --define \"_rel 0\"\
 			--buildroot \"$buildrootdir\" \
                     --define \"_specdir $specdir\" ${withargs} $specfile"
 	    localbuild.sh -e HOME=/home/abuild ${buildenv:+-s} $buildenv $command
