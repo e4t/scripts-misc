@@ -340,6 +340,9 @@ do
 		    prefix="T"
 		    mainline="Temporary"
 		    ;;
+		"") prefix=""
+		    mainline=""
+		    ;;
 		*)
 		    die "Wrong argument for mainline: $1"
 		    ;;
@@ -458,7 +461,7 @@ do
 	numstr=
 	[ $max -gt 1 ] && { cntstr=$(printf " %i/%i" $cnt $max);  numstr=$(printf "%2.2i-" $cnt); };
 	subjprefix="[PATCH${cntstr}]"
-	filename=${prefix}_${numstr}$(get_filename $i)
+	filename=${prefix}${prefix:+_}${numstr}$(get_filename $i)
 	[ $? -eq 0 ] || die "Cannot get filename"
 	signedoff="Signed-off-by: $myid%n"
 	filter=$CAT
@@ -476,7 +479,7 @@ do
 #    [ -n "$git_repo_tag" ] && \
     is_upstream_repo "$(get_git_repo)" $NON_UPSTREAM_SIGNATURES && \
 	commit_id="Git-commit: %H%n"
-    command="git --no-pager show  ${relative:+--relative=}${relative} --stat -p $i --pretty=format:\"From: %an <%ae>%nDate: %ad%nSubject: ${subjprefix}%s%nPatch-mainline: ${mainline}%n${git_repo_tag}${commit_id}References: ${references}%n${signedoff}%n%b\""
+    command="git --no-pager show  ${relative:+--relative=}${relative} --stat -p $i --pretty=format:\"From: %an <%ae>%nDate: %ad%nSubject: ${subjprefix}%s${mainline:+%nPatch-mainline: }${mainline}%n${git_repo_tag}${commit_id}References: ${references}%n${signedoff}%n%b\""
     if [ -n "$filename" ]
     then
 	eval ${command} | eval ${filter} > ${directory:+$directory/}$filename
