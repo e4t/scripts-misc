@@ -37,7 +37,7 @@ do
 		;;
 	    checkout|co)
 		checkout=1
-		add_dir=1
+		[ ! -d ./.osc -o ! -e ./.osc/_project ] && add_dir=1
 		optlist="$optlist $1"
 		shift
 		break
@@ -102,27 +102,50 @@ then
     project=${project%/*}
 fi
 
-if [ $add_dir -eq 1 ]
-then
-    dir=${project//:/$DELIMITER}${package:+/}$package
+#if [ $add_dir -eq 1 ]
+#then
 #    if [ -n "$package" ] 
 #    then
-	add_arg="-o $dir"
+#	add_arg="-o $dir"
 #    else
 #	add_arg="-c $dir"
 #    fi
-    test -d "$dir" || mkdir -p "$dir"
-fi
+#fi
 
 optlist="$optlist $add_arg $optlist_tail"
 echo $optlist
-if [ -n "$package" ] # This will hopefully go away soon!
+
+restore () {
+    local unpacktmp project
+    unpacktmp=$1
+    project=$2
+    [ -n "$unpacktmp" -a -d "$unpacktmp" ] && { mv $unpacktmp/$project . ; rmdir $unpacktmp; }
+}
+
+if [ $add_dir -ne 1 ]
 then
     exec /usr/bin/osc $optlist
 else
+    dir=${project//:/$DELIMITER}  # ${package:+/}$package
+    # Move $project out of the way if it exists
+    if [ -d ${project} ]
+    then
+	unpacktmp=$(mktemp -d "tmp-XXXXXXX") || exit 1
+	mv $project $unpacktmp || { rmdir $unpacktmp; exit 1; }
+    fi
+    # if target directory exists, simply create a link
+    [ -d $dir ] && { ln -s ${project} ${dir} || { restore $unpacktmp $project; exit 1; }; }
     /usr/bin/osc $optlist
     ret=$?
-    [ $ret -eq 0 ] && { mv $project/* $dir && mv $project/.osc $dir && rmdir $project; }
-    echo $dir
+    if [ -d $dir ]
+    then
+	# remove link
+	rm $project
+    else
+	# target directory didn't exist. Simply move $project directory on success
+	if [ $ret -eq 0 ]; then mv $project ${dir}; else rm -rf $project; fi
+    fi
+    # Move $project back if it has existed
+    restore $unpacktmp $project
     exit $ret
 fi
