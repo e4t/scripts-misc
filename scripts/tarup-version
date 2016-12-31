@@ -32,7 +32,6 @@ die() {
 compression=bz2
 sha1=HEAD
 verbose=false
-package=$(basename $(git rev-parse --show-toplevel)) || die "Not git repo"
 
 while [ -n "$1" ]
 do
@@ -52,6 +51,7 @@ do
 	    shift ;;
     esac
 done
+[ -z "$package" ] && package=$(basename $(git rev-parse --show-toplevel)) || die "Not git repo"
 [ -z "$target" ] && { usage; exit 1; }
 version=$(get_version $sha1) || die "sha1 $sha1 doesn't exist"
 create_archive $package $version $sha1 $target $compression || die "Cannot create archive"
