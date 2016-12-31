@@ -200,11 +200,12 @@ even works for other architectures.
 This script requires the BUILDENVHOME environment variable to be set.
 It specifies where the chroot directory is to be created.
 
-setup_bev.sh [-a <arch>] [-r <repository>] [-d <directory>] <PRODUCT> [POST]
+setup_bev.sh [-a <arch>] [-r <repository>] [-d <directory>] [-n] <PRODUCT> [POST]
 Options:
         -a <arch>: select architecture: i586, x86_64
         -r <repository>: set repository, default: standard
         -d <directory>: use alternate directory for build env
+	-n: do not strip trailing _* from target
         <PRODUCT>: product name: openSUSE-13.2, SLE-12-SP1, etc.
         POST: For SLE - if not to be included in the product name
               - GA Update Update:Test (default: GA)

@@ -14,11 +14,12 @@ die () {
 }
 
 usage() {
-    echo "$(basename $0) [-a <arch>] [-r <repository>] [-d <directory>] <PRODUCT> [POST]"
+    echo "$(basename $0) [-a <arch>] [-r <repository>] [-d <directory>] [-n] <PRODUCT> [POST]"
     echo "Options:"
     echo -e "\t-a <arch>: select architecture: i586, x86_64"
     echo -e "\t-r <repository>: set repository, default: standard"
     echo -e "\t-d <directory>: use alternate directory for build env"
+    echo -e "\t-n: do not strip trailing _* from target"
     echo -e "\t<PRODUCT>: product name: openSUSE-13.2, SLE-12-SP1, etc."
     echo -e "\tPOST: For SLE - if not to be included in the product name"
     echo -e "\t      - GA Update Update:Test (default: GA)"
@@ -28,6 +29,7 @@ usage() {
 cmd=$0
 cmdargs="${1+\"$@\"}"
 
+nostrip=false
 while [ -n "$1" ]
 do
     arg=$1
@@ -36,6 +38,7 @@ do
 	-a) arch=$1; shift ;;
 	-r) repository=$1; shift ;;
 	-d) directory=$1; shift ;;
+	-n) nostrip=true ;;
 	-*) usage ;;
 	*)
 	    if [ -n "$name" ]
@@ -154,7 +157,7 @@ parse_name() {
 	    ;;
     esac
     # clip last _* from $target: this may be used to distinguish things locally
-    target=${target%_*}
+    $nostrip || target=${target%_*}
 }
 
 set_passwd_get_home()
