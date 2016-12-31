@@ -3,7 +3,7 @@
 get_version() {
     local sha1=$1 version
     version=$(git describe $sha1 2>/dev/null) || return 1
-    echo $version | sed -e "s/-/./" -e  "s/-/_/"
+    echo $version | sed -e "s/-/./g" -e  "s/-/_/g"
 }
 
 create_archive() {
