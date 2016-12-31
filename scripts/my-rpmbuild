@@ -37,7 +37,7 @@ save_cmdline ()  # <dir_to_put_file> <env> <command_to_save> <command_args> <sud
 	fi
 	tmp=$(mktemp /tmp/file-XXXXXX)
 	[ -n "$env" ] && echo $env > $tmp
-	echo $cmdline >> $tmp 
+	echo $cmdline >> $tmp
 	$sudo mv $tmp "$dir/.command_$cmd"
     fi
 }
@@ -63,7 +63,7 @@ sanitize_specfile () {
 }
 
 usage() {
-    echo "$(basename $0) [-n][-s][-y][-b buildopt][-e buildenv] [specfile]"
+    echo "$(basename $0) [-n][-s][-y][-b buildopt][-e buildenv][--with[out]-<option>][-v] [specfile]"
     echo "Options:"
     echo -e "\t-n: do not create a git repo"
     echo -e "\t-s: don't build in a separated \`lndir'ed\` directory"
@@ -71,6 +71,8 @@ usage() {
     echo -e "\t-a <arch>: specify architecture if not the same as host."
     echo -e "\t-b <buildopt>: <buildopt>: -bc -bb -bi -bs"
     echo -e "\t-e <buildenv>: the build environment overrides BUILDENV if set"
+    echo -e "\t--with[out]-<option>: add this --with[out]-* option to rpmbuild"
+    echo -e "\t-v: run rpmbuild verbose"
     echo -e "\t<specfile>: the specfile (if applicable with path)"
 }
 
@@ -124,10 +126,10 @@ canonicalize_specfile()
 }
 
 exec_build () {
-    local builddir buildopt specfile withargs
+    local builddir buildopt specfile withargs verbose verboseopt
 
     buildopt=$2
-    specfile=$4
+    specfile=$5
 
     builddir=$1
     sourcedir=$specdir #$thisdir
@@ -138,12 +140,18 @@ exec_build () {
     #  specdir=$specdir
 
     withargs="$3"
+    verbose="$4"
 
     mkdir -p $buildrootdir $rpmdir $srcrpmdir
 
+    if [ $verbose = 1 ]
+    then
+	verboseopt="-vv"
+    fi
     if [ -z "$buildenv" ]
     then
-	rpmbuild $buildopt $target --nodeps --define "_srcrpmdir $srcrpmdir" \
+	rpmbuild $buildopt $target --nodeps $verboseopt --define "_srcrpmdir $srcrpmdir" \
+	    --define "_build_create_debug 1" \
 	    --define "_sourcedir $sourcedir" --define "_rpmdir $rpmdir" \
 	    --define "_target ${arch}_linux" --define "_target_cpu ${arch}" \
 	    --define "_builddir $builddir" \
@@ -155,7 +163,8 @@ exec_build () {
     else
 	if which localbuild.sh &> /dev/null
 	then
-	    command="rpmbuild $buildopt $target --nodeps --define \"_srcrpmdir $srcrpmdir\"\
+	    command="rpmbuild $buildopt $target --nodeps $verboseopt --define \"_srcrpmdir $srcrpmdir\"\
+                    --define \"_build_create_debug 1\" \
                     --define \"_sourcedir $sourcedir\"\
                     --define \"_rpmdir $rpmdir\"\
 	            --define \"_target ${arch}_linux\"\
@@ -261,13 +270,14 @@ get_builddir () {
 }
 
 do_build ()  {
-    local build_in_src srcdir buildopt specfile
+    local build_in_src srcdir buildopt withargs verbose specfile
     local builddir
     build_in_src=$1
     srcdir=$2
     buildopt=$3
     withargs="$4"
-    specfile=$5
+    verbose=$5
+    specfile=$6
 
     buildopt="--short-circuit $buildopt"
     if [ "$build_in_src" = "0" ]
@@ -283,14 +293,15 @@ do_build ()  {
 	path_is_absolute $srcdir || srcdir="$thisdir/$srcdir"
 	builddir=$srcdir
     fi
-    exec_build $builddir "$buildopt" "$withargs" $specfile
+    exec_build $builddir "$buildopt" "$withargs" $verbose $specfile
 }
 
 do_local_build () {
-    local buildopt specfile
+    local buildopt withargs verbose specfile
     buildopt=$1
     withargs="$2"
-    specfile=$3
+    verbose=$3
+    specfile=$4
     if [[ "$buildopt" == *-bp* ]]
     then
 	die "buildopt -bp doesn't make sense with local directory"
@@ -299,15 +310,16 @@ do_local_build () {
 	die "buildopt $buildopt not allowed for build in local directory"
     fi
     buildopt="--short-circuit $buildopt"
-    exec_build $thisdir "$buildopt" "$withargs" $specfile
+    exec_build $thisdir "$buildopt" "$withargs" $verbose $specfile
 }
 
 test_build_opts_do_build () {
-    local buildopt build_in_src specfile
+    local buildopt build_in_src withargs verbose specfile
     buildopt=$1
     build_in_src=$2
     withargs="$3"
-    specfile=$4
+    verbose=$4
+    specfile=$5
 
     if [[ "$buildopt" == +(-bp|-bi|-bc|-bb) ]]
     then
@@ -315,22 +327,22 @@ test_build_opts_do_build () {
 	if [ -d $srcdir ]
 	then
 	    # a subdirectory with the unpacked sources exists
-	    do_build $build_in_src ./$srcdir "$buildopt" "$withargs" $specfile
+	    do_build $build_in_src ./$srcdir "$buildopt" "$withargs" $verbose $specfile
 	else
 	    # if possible, create a subdirectory with the unpacked sources
 	    if test -z "$nogit" && which rpm-git &> /dev/null
 	    then
 		# we can create a subdirectory with unpacked sources
 		rpm-git $target $specfile || die "rpm-git failed"
-		do_build $build_in_src ./$srcdir "$buildopt" "$withargs" $specfile
+		do_build $build_in_src ./$srcdir "$buildopt" "$withargs" $verbose $specfile
 	    else
 		# just build, don't bother to create a separate src dir
-		exec_build $thisdir/.build "$buildopt" "$withargs" $specfile
+		exec_build $thisdir/.build "$buildopt" "$withargs" $verbose $specfile
 	    fi
 	fi
     else
 	# just build, don't bother to create a separate src dir
-	exec_build $thisdir/.build "$buildopt" "$withargs" $specfile
+	exec_build $thisdir/.build "$buildopt" "$withargs" $verbose $specfile
     fi
 }
 
@@ -340,6 +352,7 @@ srcdir=src
 localbuild=0
 build_in_src=0
 yes=0
+verbose=0
 unset arch
 
 while [ -n "$1" ]
@@ -355,6 +368,7 @@ do
        -l) localbuild=1 ;;
        -s) build_in_src=1 ;;
        --with*) $withargs="$withargs $cmd";;
+       -v) verbose=1;;
        *-h*) usage; exit 0 ;;
        *) specfile=$cmd ;;
    esac
@@ -405,14 +419,14 @@ then
 	if [ -e ${specfile%%.spec}.changes ]
 	then
 	    # $specdir contains rpm sources
-	    test_build_opts_do_build "$buildopt" $build_in_src "$withargs" $clean_specfile
+	    test_build_opts_do_build "$buildopt" $build_in_src "$withargs" $verbose $clean_specfile
 	else
 	    # assume: current dir contains a buildable tree
-	    do_local_build "$buildopt" "$withargs" $clean_specfile
+	    do_local_build "$buildopt" "$withargs" $verbose $clean_specfile
 	fi
     else
 	# assume: current dir contains a buildable tree
-	do_local_build "$buildopt" "$withargs" $clean_specfile
+	do_local_build "$buildopt" "$withargs" $verbose $clean_specfile
     fi
 else
     # no specfile given: current dir contains rpm sources
@@ -421,7 +435,7 @@ else
     clean_specfile=$(sanitize_specfile $specfile)
     check_buildrequires $clean_specfile $(get_builddir $buildenv) \
 	|| die "Buildrequires not satisfied"
-    test_build_opts_do_build "$buildopt" $build_in_src "$withargs" $clean_specfile
+    test_build_opts_do_build "$buildopt" $build_in_src "$withargs" $verbose $clean_specfile
 fi
 
 clean

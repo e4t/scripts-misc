@@ -276,7 +276,7 @@ done in the build system. Furthermore, when mounting the build directory
 on a test system in the same location as on the host, all paths to the
 source files are set up so that gdb will find them.
 
-my-rpmbuild [-n][-s][-b buildopt][-e buildenv] [specfile]
+my-rpmbuild [-n][-s][-b buildopt][-e buildenv][--with[out]-<option>][-v] [specfile]
 Options:
         -n: do not create a git repo
         -s: don't build in a separated `lndir'ed` directory
@@ -284,6 +284,8 @@ Options:
         -a <arch>: specify architecture if not the same as host.
         -b <buildopt>: <buildopt>: -bc -bb -bi -bs
         -e <buildenv>: the build environment overrides BUILDENV if set
+	-with[out]-<option>: add this --with[out]-* option to rpmbuild
+	-v: run rpmbuild verbose
         <specfile>: the specfile (if applicable with path)
 '-n': do not create a git repo of the package if none exists. It
       requires the directory .build to exist and contain the code to
