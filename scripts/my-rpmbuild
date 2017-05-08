@@ -374,14 +374,13 @@ do
    esac
 done
 
-[ -n "$buildenv" -a $localbuild -eq 1 ] && \
-    die "-l and -e options cannot be used together"
-
 thisdir=$(pwd)
 
 [ -z "$buildenv" ] && buildenv=$BUILDENV
 [ -z "$buildopt" ] && buildopt=-bc
 [ -z "$buildenv" -a $localbuild -eq 0 ] && die "Buildenv not set."
+[ -n "$buildenv" -a $localbuild -eq 1 ] && \
+    die "-l and -e options cannot be used together"
 
 if [ -z "$arch" ]
 then
