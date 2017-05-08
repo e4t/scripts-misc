@@ -134,7 +134,7 @@ else
 	mv $project $unpacktmp || { rmdir $unpacktmp; exit 1; }
     fi
     # if target directory exists, simply create a link
-    [ -d $dir ] && { ln -s ${project} ${dir} || { restore $unpacktmp $project; exit 1; }; }
+    [ -d $dir ] && { ln -s ${dir} ${project} || { restore $unpacktmp $project; exit 1; }; }
     /usr/bin/osc $optlist
     ret=$?
     if [ -d $dir ]
