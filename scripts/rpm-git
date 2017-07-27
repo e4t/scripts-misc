@@ -6,9 +6,10 @@ die () {
 }
 
 usage () {
-    echo -e "$(basename $0) [-f <fuzz>] [-t] [specfile]\n"
+    echo -e "$(basename $0) [-f <fuzz>] [-F <flavor>] [-t] [specfile]\n"
     echo "Options:"
     echo "   -f <fuzz>: specify maximum fuzz level. default: 0."
+    echo "   -F <flavor>: specify flavor for multibuild spec file (default: standard)"
     echo "   -t: test mode, will not create a src/ directory."
     echo "   -a <arch>: specify architecture if not the same as host."
 }
@@ -63,10 +64,13 @@ fi
 
 unset arch
 
+flavor=standard
+
 while [ -n "$1" ]
 do
     case $1 in
 	-f) shift; fuzz=$1; shift;;
+	-F) shift; flavor=$1; shift;;
         -t) test=1; shift;;
 	-a) arch=$2; shift; shift;;
 	--target) target="$1 $2"; shift; shift;;
@@ -127,10 +131,10 @@ then
     sleep 5;
 fi
 
-if grep -q "^Release:.*\.<RELEASE.*>" $specfile
+if grep -q "^Release:.*\.<RELEASE.*>" $specfile || grep -q "@BUILD_FLAVOR@" $specfile
 then
     tmpspec=$(mktemp $myroot/tmp/tmp-XXXXXX)
-    sed -e "s%<RELEASE\(.*\)>%\\1%" < $specfile > $tmpspec
+    sed -e "s%<RELEASE\(.*\)>%\\1%" -e "s%@BUILD_FLAVOR@%${flavor}%g" < $specfile > $tmpspec
     specfile="${tmpspec##$myroot}"
 fi
 

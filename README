@@ -167,15 +167,19 @@ environment exists.
 Once all patches have been applied, it creates a git repo in 'src/'
 and set up a .gitignore.
 
-rpm-git [-f <fuzz>] [-t] [specfile]
+rpm-git [-f <fuzz>] [-F <flavor>] [-t] [specfile]
 
 Options:
    -f <fuzz>: specify maximum fuzz level. default: 0.
+   -F <flavor>: specify flavor for multibuild spec file (default: standard)
    -t: test mode, will not create a src/ directory.
    -a <arch>: specify architecture if not the same as host.
 
 '-f': Set a allowed fuzz level. This is useful for older versions of some
       packages where a certain amount of fuzz was still allowed.
+'-F': In a multibuild environment, the spec file contains the pattern
+      '@FLAVOR@' which is to be replaced by the build flavor to be used.
+      The default is 'standard' which is the fallback in most cases.
 '-t': Test mode: don't create a 'src/' directory and git repo. Useful
       to test if all patches apply.
 '-a': specify an architecture in case it cannot be derived from BUILDENV.
