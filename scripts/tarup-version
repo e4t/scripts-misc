@@ -27,6 +27,8 @@ usage() {
     echo -e "\t-c <compression> set archive compression. Default: bz2"
     echo -e "\t-r <sha1> set version id. Default: HEAD"
     echo -e "\t-p package: name of package. Default: name of git directory"
+    echo -e "\t-V version: package version to put in tarball and directory names"
+    echo -e "\t            Default: format of 'git describe'"
     echo -e "\ttargetdir: directory to put archive"
 }
 
@@ -47,6 +49,7 @@ do
 	-c) shift; compression=$1; shift ;;
 	-r) shift; sha1=$1; shift ;;
 	-p) shift; package=$1; shift ;;
+	-V) shift; version=$1; shift ;;
 	-*) usage; exit 0;;
 	*)
 	    if [ -z "$target" ]
@@ -60,7 +63,7 @@ do
 done
 [ -z "$package" ] && package=$(basename $(git rev-parse --show-toplevel)) || die "Not git repo"
 [ -z "$target" ] && { usage; exit 1; }
-version=$(get_version $sha1) || die "sha1 $sha1 doesn't exist"
+[ -z "$version" ] && { version=$(get_version $sha1) || die "sha1 $sha1 doesn't exist"; }
 create_archive $package $version $sha1 $target $compression || die "Cannot create archive"
 
 $verbose && echo $package-$version

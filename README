@@ -386,6 +386,7 @@ Options:
         -c <compression> set archive compression. Default: bz2
         -r <sha1> set version id. Default: HEAD
         -p package: name of package. Default: name of git directory
+	-V version: package version to put in tarball and directory names
         targetdir: directory to put archive
 
 Requires: git, sed
