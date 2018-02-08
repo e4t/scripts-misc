@@ -9,8 +9,15 @@ get_version() {
 create_archive() {
     local package=$1 version=$2 sha1=$3 target=$4 compression=$5
 
-    git archive --format=tar.$compression --prefix=$package-$version/ \
-	-o $target/$package-$version.tar.$compression $sha1
+    git archive --format=tar --prefix=$package-$version/ \
+	-o $target/$package-$version.tar $sha1
+    case $compression in
+	bz2) bzip2 $target/$package-$version.tar ;;
+	gz) gzip $target/$package-$version.tar ;;
+	xz) xz $target/$package-$version.tar ;;
+	Z) compress $target/$package-$version.tar ;;
+	*) echo "Unknown compression" ;;
+    esac
 }
 
 usage() {
