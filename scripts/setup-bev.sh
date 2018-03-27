@@ -2,16 +2,17 @@
 
 EXTRADIRS=/space
 
+cmd=$0
+cmdargs="${1+\"$@\"}"
+
+scriptdir=$(dirname $(readlink -f $cmd))
+. $scriptdir/functions
+
 #set -x
 
 [ -e ~/.mymachine ] && . ~/.mymachine
 
 [ -n "$SPACEDIR" ] && EXTRADIRS=$SPACEDIR
-
-die () {
-    echo $1 >&2
-    exit 1
-}
 
 usage() {
     echo "$(basename $0) [-a <arch>] [-r <repository>] [-d <directory>] [-n] <PRODUCT> [POST]"
@@ -25,9 +26,6 @@ usage() {
     echo -e "\t      - GA Update Update:Test (default: GA)"
     exit 0
 }
-
-cmd=$0
-cmdargs="${1+\"$@\"}"
 
 nostrip=false
 while [ -n "$1" ]
@@ -55,30 +53,6 @@ done
 file=$name
 name=${name##*/}
 name=${name%.desc}
-
-save_cmdline ()  # <dir_to_put_file> <command_to_save> <command_args> <sudo_or_empty>
-{
-    local dir=$1
-    local cmd=$2
-    local cmdargs="$(eval echo $3)"
-    local sudo=$4
-
-    cmd="${cmd##*/}"
-    cmdline="$cmd $cmdargs"
-
-    [ -z "$dir" -o -z "$cmd" -o -z "$cmdline" ] && return 1;
-
-    if [ -d $dir ]
-    then
-	if [ -e "$dir/.command_$cmd" -a ! -e "$dir/.command_$cmd.bak" ]
-	then
-	    $sudo mv "$dir/.command_$cmd" "$dir/.command_$cmd.bak"
-	fi
-	tmp=$(mktemp /tmp/file-XXXXXX)
-	echo $cmdline > $tmp
-	$sudo mv $tmp "$dir/.command_$cmd"
-    fi
-}
 
 parse_name() {
     local local_name new_name old_name
@@ -158,56 +132,6 @@ parse_name() {
     esac
     # clip last _* from $target: this may be used to distinguish things locally
     $nostrip || target=${target%_*}
-}
-
-set_passwd_get_home()
-{
-    local builddir=$1
-    local entry passwd name uid gid tmpfile entry home
-
-    if [ -d $builddir -a -e $builddir/etc/passwd ]
-    then
-	entry=$(grep $USER $builddir/etc/passwd)
-
-	if [ -z "$entry" ]
-	then
-	    passwd=$(cat /etc/passwd | grep "^$USER:")
-
-	    if [ -z "$passwd" ]
-	    then
-		passwd=$(ypcat passwd 2>/dev/null | grep "^$USER:")
-	    fi
-
-	    if [ -z "$passwd" ]
-	    then
-		name=$(id -rnu)
-		uid=$(id -ru)
-		gid=$(id -rg)
-		passwd="$name:x:$uid:$gid::$HOME:$SHELL"
-	    fi
-
-	    if [ -n "$passwd" ]
-	    then
-		tmpfile=$(mktemp /tmp/passwd-XXXXXXXXX)
-		cat $builddir/etc/passwd >> $tmpfile
-		echo "$passwd" >> $tmpfile
-		cnt=3
-		sudo mv $tmpfile $builddir/etc/passwd || { rm $tmpfile; echo "Cannot add passwd entry"; exit 1; }
-	    else
-		echo "Cannot copy passwd entry" >&2
-	    fi
-	    entry=$passwd
-	fi
-
-	if [ -n "$entry" ]
-	then
-	    home=$(echo "$entry" | sed "s/.*:.*:.*:.*:.*:\(.*\):.*/\\1/")
-	    home=${home%/*}
-	else
-	    home=/home
-	fi
-    fi
-    echo $home
 }
 
 create_dummy_package() {
