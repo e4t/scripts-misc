@@ -10,7 +10,7 @@ die () {
 	;;
      *) shift
         echo -e "$1" >&2
-	usage >&2 
+	usage >&2
 	;;
     esac
     exit 1
@@ -53,5 +53,13 @@ case $compression in
     *) die "\"$compression\" invalid compression type" ;;
 esac
 
-git archive --format=tar.$compression --prefix=$package-$versionstring/ \
+git archive --format=tar --prefix=$package-$versionstring/ \
     -o $outdir/$package-$versionstring.tar.$compression $version
+
+    case $compression in
+	bz2) bzip2 $target/$package-$version.tar ;;
+	gz) gzip $target/$package-$version.tar ;;
+	xz) xz $target/$package-$version.tar ;;
+	Z) compress $target/$package-$version.tar ;;
+	*) echo "Unknown compression" ;;
+    esac
