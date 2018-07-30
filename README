@@ -443,3 +443,18 @@ create-tarball-from-git [-v <version>] [-d <outdir>] [-c <compression>] | [-h]
                             gz, Z, bz2, xz, lzma, zip. default: bz2.
 
 Requires: coreutils, git
+
+restore-rpms
+------------
+
+Roll back packages to a previously stored state. The state is stored
+simply by dumping the output of `rpm -qa` into a file. Default file
+name is `list.pre`.
+
+restore-rpms [ <pre-file> ] || -h
+	       -h        : help
+	       <pre-file>: file with rpm-list to get back to (generate with
+	       rpm -qa)
+               default: pre.list
+
+Requires: diffutils, grep, sed, zypper

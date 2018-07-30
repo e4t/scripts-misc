@@ -1,0 +1,39 @@
+#!/bin/bash
+
+usage() {
+    echo -e "$0 [ <pre-file> ] || -h"
+    echo -e "\t-h        : help"
+    echo -e "\t<pre-file>: file with rpm-list to get back to (generate with rpm -qa)"
+    echo -e "\t\tdefault: pre.list"
+}
+
+my_exit ()
+{
+    test -n "$post_tmp" -a -e "$post_tmp" && rm -f $post_tmp
+    exit $1
+}
+
+prefile=list.pre
+
+case $1 in
+    -h) usage; exit ;;
+    *) [ -n "$1" ] && prefile=$1 ;;
+esac
+
+post_tmp=$(mktemp /tmp/post-XXXXXX)
+rpm -qa > $post_tmp || my_exit 1
+
+remove=
+for i in `diff $prefile $post_tmp | grep '>' | cut -d' ' -f 2`;
+do
+    remove="$remove $i";
+done;
+test -n "$remove" && zypper -n remove $remove
+install=
+for i in `diff $prefile $post_tmp | grep '<' | cut -d' ' -f 2`;
+do
+    j=$(echo $i | sed -e 's/^\([^.]*.*\)/\1/' -e 's/\(^.*\)-.*/\1/')
+    echo $i $j
+    install="$install $j";
+done;
+test -n "$install" && zypper -n install $install
