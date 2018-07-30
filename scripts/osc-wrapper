@@ -83,6 +83,7 @@ then
 			package=${project##*/}
 			project=${project%%/*}
 		    fi
+		    [[ $project =~ ":" ]] || add_dir=0
 		else
 		    package="$1"
 		fi
