@@ -13,12 +13,14 @@ die () {
 }
 
 usage() {
-    echo "$(basename $0) [-s <SYSTEM>] [-l|-i|<command>]"
+    echo "$(basename $0) [-s <SYSTEM>|-R <repo>] [-r] [-e <ENV>] [-l|-i|<command>]"
     echo "Options:"
     echo -e "\t-s <SYSTEM> := openSUSE-<version> | SLE.."
     echo -e "\t  or set the BUILDENV environment variable"
     echo -e "\t-l: start interactive shell in local home directory."
     echo -e "\t-i: info only: print buildroot directory."
+    echo -e "\t-R <repo>: use <repo> in osc build-root."
+    echo -e "\t-r: run as user root."
     echo -e "\t-e <ENV>: add environment setting ENV to command. <ENV> must be of the form FOO=BAR."
     echo -e "\t<command>: run <command> in current directory but in build environment."
     echo -e "If run without command, start interactive shell in current directory."
@@ -96,6 +98,7 @@ do
 		    ;;
 		-i) infoonly=1 ;;
 		-r) do_root=1 ;;
+		-R) repo=$1; shift ;;
 		*)   usage ;;
 	    esac
 	    ;;
@@ -117,51 +120,106 @@ do
     esac
 done
 
-[ -z "$system" ] && system=$BUILDENV
-[ -z "$system" ] && die "neither build environment sepcified on command line nor BUILDENV environment variable specified"
-
-name=$system
-case $name in
-    home-*)
-	name=$(echo $name | sed -e "s@:@-@")
-	;;
-    openSUSE-*) ;;
-    openSUSE:*)
-	name=$(echo $name | sed -e "s@:@-@")
-	;;
-    SLE*)
-	;;
-    SUSE-*)
-	name=${name##SUSE-}
-	;;
-    SUSE:*)
-	name=${name##SUSE:}
-	name=$(echo $name | sed -e "s@:@-@")
-	;;
-    *:*)
-	name=$(echo $name | sed -e "s@:@-@")
-	;;
-    *-*) ;;
-    *)
-	die "$system is not a valid build repo name"
-	;;
-esac
-
-[ "$starthome" == "1" -a -n "$runcommand" ] && die "Can't specify a command with the -l option"
+[ "$starthome" == "1" -a -n "$runcommand" ] && die "Cannot specify a command with the -l option"
 [ "$starthome" == "1" -a "$infoonly" == "1" ] && die "-i (info only) makes no sense with -l"
 [ -n "$runcommand" -a "$infoonly" == "1" ] && die "-i (info only) makes no sense with a command to execute"
 
+[ -n "$repo" -a -n "$system" ] && die "Cannot specify -R and -s at the same time"
+
+# FIXME: make arch configurable
 case $(uname -m) in
     i686|i586|i486|i386) arch=i386 ;;
     *) arch=$(uname -m) ;;
 esac
 
-# if no arch is specified append current arch
-case $name in
-    *-i386|*-i586|*-x86_64|*-ppc|*-ppc64|*-ppc64le|*-s390|*-s390x|*-arm*) dir=$name ;;
-    *) dir=$name-$arch ;;
-esac
+if [ -z "$repo" ]
+then
+    [ -z "$system" ] && system=$BUILDENV
+    [ -z "$system" ] && \
+	die "neither build environment sepcified on command line nor BUILDENV environment variable specified"
 
+    name=$system
+    case $name in
+	home-*)
+	    name=$(echo $name | sed -e "s@:@-@")
+	    ;;
+	openSUSE-*) ;;
+	openSUSE:*)
+	    name=$(echo $name | sed -e "s@:@-@")
+	    ;;
+	SLE*)
+	    ;;
+	SUSE-*)
+	    name=${name##SUSE-}
+	    ;;
+	SUSE:*)
+	    name=${name##SUSE:}
+	    name=$(echo $name | sed -e "s@:@-@")
+	    ;;
+	*:*)
+	    name=$(echo $name | sed -e "s@:@-@")
+	    ;;
+	*-*) ;;
+	*)
+	    die "$system is not a valid build repo name"
+	    ;;
+    esac
+
+    # if no arch is specified append current arch
+    case $name in
+	*-i386|*-i586|*-x86_64|*-ppc|*-ppc64|*-ppc64le|*-s390|*-s390x|*-arm*) dir=$name ;;
+	*)
+	    dir=$name-$arch ;;
+    esac
+
+    if [ ! -d ./$dir ]
+    then
+	if [ -n "$BUILDENVHOME" ]
+	then
+	    if [ -d $BUILDENVHOME/$dir ]
+	    then
+		dir=$BUILDENVHOME/$dir
+	    else
+		die "Neither ./$dir nor $BUILDENVHOME/$dir exist"
+	    fi
+	else
+	    die "./$dir doesn't exist.\n Maybe set \$BUILDENVHOME"
+	fi
+    fi
+else # $repo
+    if [ -n "$BUILDROOT" ]
+    then
+	dir=$BUILDROOT;
+    else
+	dir="$(osc config general build-root)" || die "Cannot get build-root from osc"
+	dir=${dir/*is set to \'/}
+	dir=${dir%\'}
+    fi
+    dir=${dir/\%\(repo\)s/$repo}
+    dir=${dir/\%\(arch\)s/$arch}
+    [ -n "$dir" ] || die "Cannot determine build-root"
+    [ -d "$dir" ] || die "build-root $dir doesn't exist"
+    [ -d $dir/etc ] || die "Repository $dir is bogus: /etc missing"
+    [ -e $dir/etc/passwd ] || die "Repository $dir is bogus: /etc/passwd missing"
+    if [ "$do_root" = "0" ]
+    then
+	user=$(id -u -n)
+	line=$(grep "^$user:" $dir/etc/passwd)
+	if [ -z "$line" ]
+	then
+	    line=$(grep "^$user:" /etc/passwd)
+	    [ -n "$line" ] || die "user $user not in /etc/passwd"
+	    sudo sh -c "echo $line >> $dir/etc/passwd"
+	fi
+	OFS=$IFS; IFS=:; set -- $line; IFS=$OFS
+	homedir=$6
+	if [ ! -d $dir/$homedir ]
+	then
+	    sudo mkdir -p $dir/$homedir
+	    sudo chown $user:$(id -g -n) $dir/$homedir
+	fi
+    fi
+fi
 thisdir=$(pwd)
 
 [[ $thisdir =~ .*:.* ]] && {
@@ -169,21 +227,6 @@ thisdir=$(pwd)
          "Building in such a directory may lead to strange results\n" >&2;
     read -p "(y/N)?"  -n 1 result;
     [ "$result" = "y" -o "$result" = "Y" ] || exit 1; }
-
-if [ ! -d ./$dir ]
-then
-    if [ -n "$BUILDENVHOME" ]
-    then
-	if [ -d $BUILDENVHOME/$dir ]
-	then
-	    dir=$BUILDENVHOME/$dir
-	else
-	    die "Neither ./$dir nor $BUILDENVHOME/$dir exist"
-	fi
-    else
-	die "./$dir doesn't exist.\n Maybe set \$BUILDENVHOME"
-    fi
-fi
 
 if [ $infoonly -eq 1 ]
 then
@@ -236,7 +279,7 @@ fi
 
 if [ "$do_root" = "0" ]
 then
-    homedir=$(grep $USER $dir/etc/passwd | awk -F":" ' {print $6;}')
+    [ -z "$homedir" ] && homedir=$(grep $USER $dir/etc/passwd | awk -F":" ' {print $6;}')
     [ -z "$homedir" ] && die "Missing or wrong homedir $homedir"
     [ ! -d $dir/$(dirname $homedir) ] && die "Missing or wrong homedir $homedir"
     [ -n "$homedir" -a ! -d $dir/$homedir ] && sudo mkdir $dir/$homedir
