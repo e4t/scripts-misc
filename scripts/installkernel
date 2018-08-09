@@ -494,7 +494,7 @@ do_installkernel()                                                         # {{{
 	    set -x
 	    moddir=$(mktemp -d $MODULEINSTALLDIR/tmp-XXXXXXXX) || \
 		die "cannot create tempdir"
-            make $inst_arch ${par:+-j ${par}} $inst_orig $stripvar \
+            make $inst_arch ${par:+-j} ${par} $inst_orig $stripvar \
 		INSTALL_MOD_PATH=$moddir modules_install || exit 1
 	    set +x
         fi
