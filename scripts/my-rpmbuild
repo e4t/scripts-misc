@@ -63,7 +63,7 @@ sanitize_specfile () {
 }
 
 usage() {
-    echo "$(basename $0) [-n][-s][-y][-b buildopt][-e buildenv][--with[out]-<option>][-v] [specfile]"
+    echo "$(basename $0) [-n][-s][-y][-b buildopt][-e buildenv|-R repo][--with[out]-<option>][-v] [specfile]"
     echo "Options:"
     echo -e "\t-n: do not create a git repo"
     echo -e "\t-s: don't build in a separated \`lndir'ed\` directory"
@@ -71,6 +71,7 @@ usage() {
     echo -e "\t-a <arch>: specify architecture if not the same as host."
     echo -e "\t-b <buildopt>: <buildopt>: -bc -bb -bi -bs"
     echo -e "\t-e <buildenv>: the build environment overrides BUILDENV if set"
+    echo -e "\t-R <repo>: use <repo> in osc build-root"
     echo -e "\t--with[out]-<option>: add this --with[out]-* option to rpmbuild"
     echo -e "\t-v: run rpmbuild verbose"
     echo -e "\t<specfile>: the specfile (if applicable with path)"
@@ -119,7 +120,7 @@ find_specdir() {
 canonicalize_specfile()
 {
     local specfile
-    
+
     specfile=$1
     specfile=${specfile%%.spec}.spec
     echo $specfile
@@ -148,7 +149,7 @@ exec_build () {
     then
 	verboseopt="-vv"
     fi
-    if [ -z "$buildenv" ]
+    if [ -z "$buildenv" -a -z "$repo" ]
     then
 	rpmbuild $buildopt $target --nodeps $verboseopt --define "_srcrpmdir $srcrpmdir" \
 	    --define "_build_create_debug 1" \
@@ -175,7 +176,7 @@ exec_build () {
                     --define \"_rel 0\"\
 			--buildroot \"$buildrootdir\" \
                     --define \"_specdir $specdir\" ${withargs} $specfile"
-	    localbuild.sh -e HOME=/home/abuild ${buildenv:+-s} $buildenv $command
+	    localbuild.sh -e HOME=/home/abuild ${buildenv:+-s $buildenv} ${repo:+-R $repo} $command
 	else
 	    die "localbuild.sh not found."
 	fi
@@ -260,12 +261,13 @@ check_buildrequires () {
 
 get_builddir () {
     local buildenv
-
+    local repo
     buildenv=$1
+    repo=$2
 
-    if [ -n "${buildenv}" ]
+    if [ -n "${buildenv}" -o "${repo}" ]
     then
-	localbuild.sh -i ${buildenv:+-s} $buildenv
+	localbuild.sh -i ${buildenv:+-s $buildenv} ${repo:+-R $repo}
     fi
 }
 
@@ -365,6 +367,7 @@ do
        -e) buildenv=$1; shift ;;
        -a) arch=$1; shift ;;
        -y) yes=1 ;;
+       -R) repo=$1; shift ;;
        -l) localbuild=1 ;;
        -s) build_in_src=1 ;;
        --with*) $withargs="$withargs $cmd";;
@@ -376,20 +379,31 @@ done
 
 thisdir=$(pwd)
 
-[ -z "$buildenv" ] && buildenv=$BUILDENV
-[ -z "$buildopt" ] && buildopt=-bc
-[ -z "$buildenv" -a $localbuild -eq 0 ] && die "Buildenv not set."
-[ -n "$buildenv" -a $localbuild -eq 1 ] && \
-    die "-l and -e options cannot be used together"
-
-if [ -z "$arch" ]
+[ -n "$buildenv" -a -n "$repo" ] && die "-e and -R are mutually exclusive"
+if [ -z "$repo" ]
 then
-    case $buildenv in
-	*-i386|*-i586)
-	    arch=i386 ;;
-	*-x86_64|*-ppc|*-ppc64|*-ppc64le|*-s390|*-s390x|*-arm*) 
-	    arch=${buildenv##*-} ;;
-	*) arch= ;;
+    [ -z "$buildenv" ] && buildenv=$BUILDENV
+    [ -z "$buildopt" ] && buildopt=-bc
+    [ -z "$buildenv" -a $localbuild -eq 0 ] && die "Buildenv not set."
+    [ -n "$buildenv" -a $localbuild -eq 1 ] && \
+	die "-l and -e options cannot be used together"
+
+    if [ -z "$arch" ]
+    then
+	case $buildenv in
+	    *-i386|*-i586)
+		arch=i386 ;;
+	    *-x86_64|*-ppc|*-ppc64|*-ppc64le|*-s390|*-s390x|*-arm*)
+		arch=${buildenv##*-} ;;
+	    *) arch= ;;
+	esac
+    fi
+else
+    [ $localbuild -eq 1 ] && die "-l and -R options cannot be used together"
+    [ -z "$arch" ] && arch=$(uname -m);
+    case $arch in
+	i686|i586|i486|i386) arch=i386 ;;
+	*)  ;;
     esac
 fi
 
@@ -408,7 +422,7 @@ then
     specdir=$(find_specdir $specfile) || exit $?
 
     clean_specfile=$(sanitize_specfile $specfile)
-    check_buildrequires $clean_specfile $(get_builddir $buildenv) \
+    check_buildrequires $clean_specfile $(get_builddir "$buildenv" "$repo") \
 	|| die "Buildrequires not satisfied"
 
     if [ $(stat -c %i $specdir) -eq $(stat -c %i $thisdir) ]
@@ -432,7 +446,7 @@ else
     specfile=$(find_specfile) || exit $?
     specdir=$thisdir
     clean_specfile=$(sanitize_specfile $specfile)
-    check_buildrequires $clean_specfile $(get_builddir $buildenv) \
+    check_buildrequires $clean_specfile $(get_builddir "$buildenv" "$repo") \
 	|| die "Buildrequires not satisfied"
     test_build_opts_do_build "$buildopt" $build_in_src "$withargs" $verbose $clean_specfile
 fi
