@@ -267,7 +267,7 @@ get_builddir () {
 
     if [ -n "${buildenv}" -o "${repo}" ]
     then
-	localbuild.sh -i ${buildenv:+-s $buildenv} ${repo:+-R $repo}
+	localbuild.sh -i ${buildenv:+-s} $buildenv ${repo:+-R} $repo
     fi
 }
 
