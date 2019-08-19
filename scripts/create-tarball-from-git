@@ -54,12 +54,12 @@ case $compression in
 esac
 
 git archive --format=tar --prefix=$package-$versionstring/ \
-    -o $outdir/$package-$versionstring.tar.$compression $version
+    -o $outdir/$package-$versionstring.tar $version
 
-    case $compression in
-	bz2) bzip2 $target/$package-$version.tar ;;
-	gz) gzip $target/$package-$version.tar ;;
-	xz) xz $target/$package-$version.tar ;;
-	Z) compress $target/$package-$version.tar ;;
-	*) echo "Unknown compression" ;;
-    esac
+case $compression in
+    bz2) bzip2 $outdir/$package-$versionstring.tar ;;
+    gz) gzip $outdir/$package-$versionstring.tar ;;
+    xz) xz $outdir/$package-$versionstring.tar ;;
+    Z) compress $outdir/$package-$versionstring.tar ;;
+    *) echo "Unknown compression" ;;
+esac
