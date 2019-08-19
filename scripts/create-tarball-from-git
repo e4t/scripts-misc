@@ -21,6 +21,8 @@ cat<<EOF
      $(basename $0) [-v <version>] [-d <outdir>] [-c <compression>] | [-h]
      Creaqte a tarball from HEAD or a given version of a git repo.
      Options:
+          -e <pattern>: exclude glob(7) pattern when searching for tag
+          -m <pattern>: match glob(7) pattern when searching for tag
           -v <version>: git version to use. default: HEAD
           -d <outdir>:  directory to place file. default: $pwd
           -c <compression>: comression to use. Vaild are:
@@ -36,6 +38,8 @@ package=$(basename $(git rev-parse --show-toplevel))
 while [ -n "$1" ]
 do
     case $1 in
+	-m) shift; desc_a="${des_a:+$des_a }--match \'$1\,"; shift;;
+	-e) shift; desc_a="${des_a:+$des_a }--exclude \'$1\'"; shift;;
 	-v) shift; version=$1; shift ;;
 	-d) shift; outdir=$1; shift ;;
 	-c) shift; compression=$1; shift ;;
@@ -44,7 +48,19 @@ do
     esac
 done
 
-versionstring=$(git describe $version 2>/dev/null | sed -e "s/-/./" -e  "s/-/_/")
+# get rid of leading characters - make sure we start with a number
+versionstring=$(git describe $des_a $version 2>/dev/null | sed -e "s/^[^0-9]*//")
+# only if a sha1 is given
+if [[ $versionstring =~ -g[a-f0-9]+ ]]
+then
+    sha1=$( echo $versionstring | sed -e "s/.*-g//" )
+    versionstring=$( echo $versionstring | sed -e "s/\(.*\)-g.*/\\1/" )
+    dist=$( echo $versionstring | sed -e "s/.*-//" )
+    versionstring=$( echo $versionstring |  sed -e "s/\(.*\)-.*/\\1/")
+fi
+# attempt to remove any alpha, beta, rc, ...
+versionstring=$( echo $versionstring |
+		    sed -e "s/[-A-Za-z]\+//" -e "s/\.\././" )${dist:+.${dist}}${sha1:++git${sha1}}
 
 [ -n "$versionstring" ] || die "$version not a git version"
 [ -n "$outdir" -a -d "$outdir" ] || die "\"$dir\" not a valid output directory"

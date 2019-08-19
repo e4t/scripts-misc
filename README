@@ -437,6 +437,8 @@ and top directory.
 create-tarball-from-git [-v <version>] [-d <outdir>] [-c <compression>] | [-h]
      Creaqte a tarball from HEAD or a given version of a git repo.
      Options:
+          -e <pattern>: exclude glob(7) pattern when searching for tag
+          -m <pattern>: match glob(7) pattern when searching for tag
           -v <version>: git version to use. default: HEAD
           -d <outdir>:  directory to place file. default:
           -c <compression>: comression to use. Vaild are:
