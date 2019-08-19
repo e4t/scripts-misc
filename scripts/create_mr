@@ -1,0 +1,125 @@
+#! /bin/bash
+
+#set -x
+IBSHOME=home:eeich
+
+#repo=SUSE:SLE-12-SP2:GA:Products:Update
+#package_name=slurm
+#from=OBS:network:cluster
+
+old=0
+
+OSC_CMD=iosc-wrapper
+
+usage() {
+    echo "$0 [-o|-d <dest_repo>] <source_repo> <package_name> <product_repo>   [<release_package_name>]"
+    echo -e "\t-h|--help: This message"
+    echo -e "\t-o: Use latest scratch repositry instead of creating a new one"
+    echo -e "\t-d <dest_repo>: Use <dest_repo> as scratch repository"
+    echo -e "\t<source_repo>: [OBS:|IBS:]<reponame>"
+}
+
+find_target() {
+    local dest=$1
+    local package=$2
+
+    for i in $(${OSC_CMD} ls $dest)
+do
+    if [[ $i =~ ^${package}\..* ]]
+    then
+	echo $i
+	break;
+    fi
+done
+}
+
+while [ -n "$1" ]
+do
+    case $1 in
+	-o) old=1; shift ;;
+	*-h*) usage; exit 0 ;;
+	-d) shift; dest=$1; shift ;;
+	*) from=$1; shift
+	   package_name=$1; shift
+	   repo=$1; shift	   
+	   package_name_mr=$1; shift
+	   ;;
+    esac
+done
+
+[ -n "$repo" -a -n "$package_name" -a -n "$from" ] || \
+    { echo "<product_repo>, <package_name> and <source_repo> are required"; \
+      usage; exit 1; }
+
+[  $old -ne 1 -o -z "$dest" ] || \
+    { echo "cannot use -o and -d simultanously"; usage; exit 1; }
+
+case $repo in
+    *:*-12*)
+	major=12
+	match_dest=staging-NUM-hpc
+	;;
+    *:*-15*)
+	major=15
+	[[ $repo =~ .*-SP([[:digit:]]+).* ]] && sp=${BASH_REMATCH[1]}
+	match_dest=staging-$major${sp:+_${sp}}-NUM
+	checkout_dir=staging15${sp:+_${sp}}
+	;;
+esac
+
+if [ -z "$dest" ]
+then
+    pattern="$IBSHOME:${match_dest/NUM/[[:digit:]]+}"
+    list=$(${OSC_CMD} ls / | grep -E "$pattern")
+    if [ -n "$list" ]
+    then
+	declare -i cnt=1
+	while true;
+	do
+	    pattern="$IBSHOME:${match_dest/NUM/$cnt}"
+	    [[ $list =~ $pattern ]] && { let cnt++; dest_last=$pattern; continue; }
+	    break
+	done
+	if [ $old -eq 1 ]
+	then
+	    dest=$dest_last
+	else
+	    dest=$pattern
+	fi
+    else
+	dest="$IBSHOME:${match_dest/NUM/1}"
+    fi
+else
+    [[ $dest =~ ^$IBSHOME.* ]] || dest=$IBSHOME:$dest
+fi
+
+[ -n "$package_name_mr" ] || package_name_mr=$package_name
+from=${from/#OBS:/openSUSE.org:}
+from=${from/#IBS:/}
+
+
+
+target=$(find_target $dest $package_name_mr)
+
+${OSC_CMD} ls $from &> /dev/null || \
+    { echo "$from does not exist"; exit 1; }
+${OSC_CMD} ls $from $package_name &> /dev/null || \
+    { echo "$package_name does not exist in $from"; exit 1; }
+
+if [ -z "$target" ]
+then
+    ${OSC_CMD} branch -M -N $repo $package_name_mr $dest || \
+	{ echo "branch failed"; exit 1; }
+    ##${OSC_CMD} meta prj $dest -e
+    target=$(find_target $dest $package_name_mr)
+fi
+
+[ -n "$target" ] ||
+  { echo "no target package for ${package_name_mr} found in $repo" ; exit 1; }
+
+#echo $dest $from $package_name_mr $target
+
+${OSC_CMD} copypac -e -K $from $package_name $dest $target || \
+    { echo "copypac failed" ; exit 1; }
+
+echo -e "Check out project with:\n$OSC_CMD co $dest $target"
