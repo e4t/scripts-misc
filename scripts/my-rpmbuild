@@ -50,11 +50,13 @@ sanitize_specfile () {
     local specfile
 
     specfile=$1
+    flavor=$2
 
-    if grep -q "^Release:.*\.<RELEASE.*>" $specfile
+    if [ -n "${flavor}" ] || grep -q "^Release:.*\.<RELEASE.*>" $specfile
     then
 	tmp=$(mktemp ${thisdir}/.tmp-XXXXXX.spec)
 	sed -e "s%<RELEASE\(.*\)>%\\1%" < $specfile > $tmp
+	[ -n "${flavor}" ] && sed -ie "s%@BUILD_FLAVOR@%${flavor}%" $tmp
 	test -e $tmp || exit 1
 	echo $tmp
     else
@@ -72,6 +74,7 @@ usage() {
     echo -e "\t-b <buildopt>: <buildopt>: -bc -bb -bi -bs"
     echo -e "\t-e <buildenv>: the build environment overrides BUILDENV if set"
     echo -e "\t-R <repo>: use <repo> in osc build-root"
+    echo -e "\t-F <flavor>: replace @BUILD_FLAVOR@ with <flavor>"
     echo -e "\t--with[out]-<option>: add this --with[out]-* option to rpmbuild"
     echo -e "\t-v: run rpmbuild verbose"
     echo -e "\t<specfile>: the specfile (if applicable with path)"
@@ -368,6 +371,7 @@ do
        -a) arch=$1; shift ;;
        -y) yes=1 ;;
        -R) repo=$1; shift ;;
+       -F) flavor=$1; shift ;;
        -l) localbuild=1 ;;
        -s) build_in_src=1 ;;
        --with*) $withargs="$withargs $cmd";;
@@ -421,7 +425,7 @@ then
     specfile=$(canonicalize_specfile $specfile) || exit $?
     specdir=$(find_specdir $specfile) || exit $?
 
-    clean_specfile=$(sanitize_specfile $specfile)
+    clean_specfile=$(sanitize_specfile $specfile "$flavor")
     check_buildrequires $clean_specfile $(get_builddir "$buildenv" "$repo") \
 	|| die "Buildrequires not satisfied"
 
@@ -445,7 +449,7 @@ else
     # no specfile given: current dir contains rpm sources
     specfile=$(find_specfile) || exit $?
     specdir=$thisdir
-    clean_specfile=$(sanitize_specfile $specfile)
+    clean_specfile=$(sanitize_specfile $specfile "$flavor")
     check_buildrequires $clean_specfile $(get_builddir "$buildenv" "$repo") \
 	|| die "Buildrequires not satisfied"
     test_build_opts_do_build "$buildopt" $build_in_src "$withargs" $verbose $clean_specfile
