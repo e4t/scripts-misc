@@ -176,7 +176,7 @@ exec_build () {
                     --define \"_rel 0\"\
 			--buildroot \"$buildrootdir\" \
                     --define \"_specdir $specdir\" ${withargs} $specfile"
-	    localbuild.sh -e HOME=/home/abuild ${buildenv:+-s $buildenv} ${repo:+-R $repo} $command
+	    localbuild.sh -e HOME=${HOME} ${buildenv:+-s $buildenv} ${repo:+-R $repo} $command
 	else
 	    die "localbuild.sh not found."
 	fi
