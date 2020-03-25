@@ -490,3 +490,20 @@ install-all
 
 Requires:
 rpm, cpio
+
+mount_export_install
+--------------------
+
+This script will look for ISOs in DISTROOT and check if they are
+loop-mounted to a matching directories in MOUNTPOINT, if needed
+it will create them.
+It will export this directory for NFS for the network EXPORT and
+register it as nfs mount point and ftp directory with SLP.
+DISTROOT, MOUNTPOINT and EXPORT are environment variables set in
+the script itself.
+
+mount_export_install
+
+Requires: coreutils, grep, util-linux, nfs-kernel-server,
+	  coreutils, openslp
+
