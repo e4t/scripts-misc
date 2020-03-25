@@ -507,3 +507,15 @@ mount_export_install
 Requires: coreutils, grep, util-linux, nfs-kernel-server,
 	  coreutils, openslp
 
+list_binary_packages
+--------------------
+
+Lists all binary packages (without version and extension) for
+source packages listed in PACKAGE_LIST for all architectures
+listed in ARCH_LIST for the repositories in REPO_LIST in
+project PROJECT. The variables are set in a file whose name
+is passed on the command line.
+
+list_binary_packages <input_file>
+
+Requires: osc

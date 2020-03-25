@@ -1,0 +1,117 @@
+#! /bin/bash
+
+#set -x
+
+package_filter()
+{
+    local line
+    while read line
+    do
+	case $line in
+            _buildenv|_statistics|rpmlint.log) continue ;;
+            *-debuginfo-*) continue ;;
+            *-debugsource-*) continue ;;
+	    *.src.rpm) continue ;;
+            *) echo $line ;;
+	esac
+    done
+}
+
+name_filter()
+{
+    local arch=$1
+    while read name
+    do
+    [[ $name =~ (.*)-[^-]+-[\.0-9]+\.($arch|noarch).rpm ]] && \
+	echo "  ${BASH_REMATCH[1]}"
+    done
+}
+
+get_project()
+{
+    local api=$1
+    local project=$2
+    local package=$3
+    osc -A $api meta pkg $project $package | \
+	while read line
+	do
+	    [[ $line =~ package\ .*\ project=\"([^\"]+)\" ]] && \
+		{ echo ${BASH_REMATCH[1]}; return; }
+	done
+}
+
+get_builds()
+{
+    local api=$1
+    local project=$2
+    local package=$3
+    osc -A $api cat $project $package _multibuild 2>/dev/null | \
+	while read line
+	do
+	    [[ $line =~ \<package\>(.*)\</package\> ]] && \
+		echo -n "${BASH_REMATCH[1]} "
+	done
+}
+
+get_link()
+{
+    local api=$1
+    local project=$2
+    local package=$3
+    local link=0
+    osc -A $api ls $project $package | \
+	while read line
+	do
+	    [[ $line =~ ^_link ]] && link=1
+	    [ $link -eq 1 ] && \
+		[[ $line =~ \#\ -\>\ ([^\ ]+)\ ([^\ ]+)\ .* ]] && \
+		echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
+	done
+}
+
+usage()
+{
+    echo "$0 listfile" >&2
+}
+
+list=$1
+[ -n "$list" ] || { usage; exit 1; }
+[ -e ./$list ] || { echo "$list does not exist!" >&2; exit 1; }
+. ./${list}
+
+[ -n "$API" ] || { echo "No API specified!" >&2; exit 1; }
+[ -n "REPO_LIST" ] || { echo "No Repositories specified!" >&2; exit 1; }
+[ -n "$ARCH_LIST" ] || { echo "No arches specified!" >&2; exit 1; }
+
+[ -n "$PROJECT" ] || { echo "No project specified!" >&2; exit 1; }
+[ -n "$PACKAGE_LIST" ] || { echo "No package list!" >&2; exit 1; }
+
+for pa in $PACKAGE_LIST
+do
+    echo "${pa}:"
+    project=$(get_project $API $PROJECT $pa)
+    builds=$(get_builds $API $project $pa)
+    link=$(get_link $API $project $pa)
+    if [ -n "$link" ]
+    then
+	project=${link% *}
+	pa=${link#* }
+    fi
+    for re in $REPO_LIST
+    do
+	for arch in $ARCH_LIST
+	do
+	    echo " ${arch}:"
+	    case $builds in
+		"")
+		    osc -A $API ls -b $project $pa $re $arch | \
+			package_filter | name_filter $arch ;;
+		*)  for b in $builds
+		    do
+			osc -A $API ls -b $project $pa:$b $re $arch | \
+                            package_filter | name_filter $arch
+		    done ;;
+	    esac
+	done
+    done
+done
