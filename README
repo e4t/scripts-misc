@@ -480,3 +480,13 @@ create_mr [-o|-d <dest_repo>] <source_repo> <package_name> <product_repo>
 OBS/IBS are set appropriately.
 
 Requires: osc
+
+install-all
+-----------
+
+Install all RPM-files in a directory in a subdirectory install/.
+
+install-all
+
+Requires:
+rpm, cpio

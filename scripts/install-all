@@ -1,0 +1,14 @@
+#! /bin/sh
+
+if [ -d install/ ]
+then
+	rm -rf install/*
+else
+	mkdir install
+fi
+cd install/
+
+for i in ../*.rpm
+do
+    echo -ne "$i "; rpm2cpio $i | cpio -di
+done
