@@ -179,7 +179,7 @@ exec_build () {
                     --define \"_rel 0\"\
 			--buildroot \"$buildrootdir\" \
                     --define \"_specdir $specdir\" ${withargs} $specfile"
-	    localbuild.sh -e HOME=${HOME} ${buildenv:+-s $buildenv} ${repo:+-R $repo} $command
+	    localbuild.sh -e HOME=${HOME} ${buildenv:+-s $buildenv} ${repo:+-R $repo} ${arch:+-a $arch} $command
 	else
 	    die "localbuild.sh not found."
 	fi
@@ -270,7 +270,7 @@ get_builddir () {
 
     if [ -n "${buildenv}" -o "${repo}" ]
     then
-	localbuild.sh -i ${buildenv:+-s} $buildenv ${repo:+-R} $repo
+	localbuild.sh -i ${buildenv:+-s} $buildenv ${repo:+-R $repo} ${arch:+-a $arch}
     fi
 }
 
