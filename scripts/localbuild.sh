@@ -215,8 +215,12 @@ else # $repo
 	if [ -z "$line" ]
 	then
 	    line=$(grep "^$user:" /etc/passwd)
+	    if [ -z "$line" ]
+            then
+               line=$(ypcat passwd 2>/dev/null | grep "^$user:")
+            fi
 	    [ -n "$line" ] || die "user $user not in /etc/passwd"
-	    sudo sh -c "echo $line >> $dir/etc/passwd"
+	    sudo sh -c "echo \"$line\" >> $dir/etc/passwd"
 	fi
 	OFS=$IFS; IFS=:; set -- $line; IFS=$OFS
 	homedir=$6
