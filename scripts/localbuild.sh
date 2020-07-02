@@ -200,6 +200,10 @@ else # $repo
     fi
     dir=${dir/\%\(repo\)s/$repo}
     dir=${dir/\%\(arch\)s/$arch}
+    if [[ $dir =~ %\(project\)s ]]; then
+       project="$(osc info | sed -n 's/Project name: //p')"
+    fi
+    dir=${dir/\%\(project\)s/$project}
     [ -n "$dir" ] || die "Cannot determine build-root"
     [ -d "$dir" ] || die "build-root $dir doesn't exist"
     [ -d $dir/etc ] || die "Repository $dir is bogus: /etc missing"
