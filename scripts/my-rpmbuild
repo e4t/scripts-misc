@@ -287,7 +287,7 @@ do_build ()  {
     buildopt="--short-circuit $buildopt"
     if [ "$build_in_src" = "0" ]
     then
-	which lndir &>/dev/null || die "no \'lndir\' binary found"
+	which lndir &>/dev/null || die "no 'lndir' binary found"
 	[ ! -d .build ] && mkdir -p .build
 	cd .build
 	path_is_absolute $srcdir || srcdir="../$srcdir"
