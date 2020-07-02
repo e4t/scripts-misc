@@ -98,6 +98,7 @@ do
 		    ;;
 		-i) infoonly=1 ;;
 		-r) do_root=1 ;;
+		-a) arch=$1; shift ;;
 		-R) repo=$1; shift ;;
 		*)   usage ;;
 	    esac
@@ -127,10 +128,12 @@ done
 [ -n "$repo" -a -n "$system" ] && die "Cannot specify -R and -s at the same time"
 
 # FIXME: make arch configurable
-case $(uname -m) in
-    i686|i586|i486|i386) arch=i386 ;;
-    *) arch=$(uname -m) ;;
-esac
+if [ -z "$arch" ]; then
+    case $(uname -m) in
+	i686|i586|i486|i386) arch=i386 ;;
+	*) arch=$(uname -m) ;;
+    esac
+fi
 
 if [ -z "$repo" ]
 then
