@@ -201,7 +201,13 @@ else # $repo
     dir=${dir/\%\(repo\)s/$repo}
     dir=${dir/\%\(arch\)s/$arch}
     if [[ $dir =~ %\(project\)s ]]; then
-       project="$(osc info | sed -n 's/Project name: //p')"
+       project="$(d=$(pwd); \
+                      while true; \
+                        do osc info $d 2>/dev/null && break;\
+                        d=$(realpath $d/..); \
+                        [ "$d" != "/" ] || break; \
+                      done | sed -n 's/Project name: //p')"
+       [ -n "$project" ] || die "Cannot find project"
     fi
     dir=${dir/\%\(project\)s/$project}
     [ -n "$dir" ] || die "Cannot determine build-root"
