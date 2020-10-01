@@ -519,3 +519,13 @@ is passed on the command line.
 list_binary_packages <input_file>
 
 Requires: osc
+
+ls-bin
+------
+
+In an OBS package directory, list all binary packages built for
+a given repository, arch and optionally flavor.
+
+ls-bin -M flavor repository arch
+
+Requires: grep, sed

@@ -1,0 +1,46 @@
+#! /bin/bash
+
+filter_ls() {
+    grep -v _buildenv | \
+        grep -v _statistics | \
+        grep -v rpmlint.log | \
+        grep -Ev ".*\.src\.rpm" | \
+        grep -Ev ".*-debuginfo-.*\.rpm" | \
+        grep -Ev ".*-debugsource-.*\.rpm" | \
+        grep -Ev ".*-openqa-tests-.*\.rpm" | \
+        sed -e 's/\(^[^.]*\).*/\1/' -e 's/\(^.*\)-.*/\1/'
+}
+
+help() {
+    echo "List packages for buildrepo <repo> and <arch> for <flavor>:"
+    echo "$0 [-M <flavor>] <repo> <arch>"
+}
+
+while [ -n "$1" ]; do
+    case $1 in
+        -h) help; exit 1 ;;
+	-M) shift; flavor=$1; shift ;;
+	*) if [ -z "$repo" ]; then
+	       repo=$1
+	   elif [ -z "$arch" ]; then
+	       arch=$1
+	   else
+	       break
+	   fi
+	   shift ;;
+    esac
+done
+[ -n "$repo" ] || { help; exit 1; }
+[ -n "$arch" ] || arch=$(uname -m)
+
+while read line; do
+    case $line in
+	Project\ name:*) project=${line##* } ;;
+	Package\ name:*) package=${line##* } ;;
+	API\ URL:*) api_url=${line##* } ;;
+      esac	
+done <<< $(osc info || { echo "Not an OBS package!"; exit 1; })
+
+for pkg in $(osc -A $api_url ls -b $project $package${flavor:+:$flavor} $repo $arch); do
+    echo $pkg | filter_ls
+done
