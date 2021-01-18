@@ -22,10 +22,11 @@ usage() {
 find_target() {
     local dest=$1
     local package=$2
+    local repo=$3
 
     for i in $(${OSC_CMD} ls $dest)
 do
-    if [[ $i =~ ^${package}\..* ]]
+    if [[ $i =~ ^${package}\.${repo//:/_} ]]
     then
 	echo $i
 	break;
@@ -99,7 +100,7 @@ from=${from/#IBS:/}
 
 
 
-target=$(find_target $dest $package_name_mr)
+target=$(find_target $dest $package_name_mr $repo)
 
 ${OSC_CMD} ls $from &> /dev/null || \
     { echo "$from does not exist"; exit 1; }
@@ -111,7 +112,7 @@ then
     ${OSC_CMD} branch -M -N $repo $package_name_mr $dest || \
 	{ echo "branch failed"; exit 1; }
     ##${OSC_CMD} meta prj $dest -e
-    target=$(find_target $dest $package_name_mr)
+    target=$(find_target $dest $package_name_mr $repo)
 fi
 
 [ -n "$target" ] ||
