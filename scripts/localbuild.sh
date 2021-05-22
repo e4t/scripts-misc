@@ -63,7 +63,7 @@ all_cleanup() {
     for i in $mount_list
     do
 	echo "unmounting $i"
-	sudo umount  $i
+	sudo umount  $i || echo "Unmounting of $i failed!" >&2
     done
 
     for i in $rmdirs
