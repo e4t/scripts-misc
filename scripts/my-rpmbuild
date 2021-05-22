@@ -262,7 +262,7 @@ check_buildrequires () {
     return 0
 }
 
-get_builddir () {
+get_buildroot () {
     local buildenv
     local repo
     buildenv=$1
@@ -427,7 +427,7 @@ then
     specdir=$(find_specdir $specfile) || exit $?
 
     clean_specfile=$(sanitize_specfile $specfile "$flavor")
-    check_buildrequires $clean_specfile $(get_builddir "$buildenv" "$repo") \
+    check_buildrequires $clean_specfile $(get_buildroot "$buildenv" "$repo") \
 	|| die "Buildrequires not satisfied"
 
     if [ $(stat -c %i $specdir) -eq $(stat -c %i $thisdir) ]
@@ -451,7 +451,7 @@ else
     specfile=$(find_specfile) || exit $?
     specdir=$thisdir
     clean_specfile=$(sanitize_specfile $specfile "$flavor")
-    check_buildrequires $clean_specfile $(get_builddir "$buildenv" "$repo") \
+    check_buildrequires $clean_specfile $(get_buildroot "$buildenv" "$repo") \
 	|| die "Buildrequires not satisfied"
     test_build_opts_do_build "$buildopt" $build_in_src "$withargs" $verbose $clean_specfile
 fi
