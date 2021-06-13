@@ -64,7 +64,7 @@ fi
 
 unset arch
 
-flavor=standard
+flavor=     #standard
 
 while [ -n "$1" ]
 do
@@ -100,6 +100,13 @@ then
 	    *-x86_64|*-ppc|*-ppc64|*-ppc64le|*-s390|*-s390x|*-arm*) 
 		arch=${BUILDENV##*-} ;;
 	    *) arch= ;;
+	esac
+    fi
+    if [ -z "$arch" ]
+    then
+	arch=$(uname -m)
+	case $arch in
+            i686|i586|i486|i386) arch=i386 ;;
 	esac
     fi
 fi
