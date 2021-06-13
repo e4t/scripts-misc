@@ -2,7 +2,9 @@
 
 #set -x
 IBSHOME=home:eeich
-
+DEBUG=:
+#STRUT=:
+#DEBUG=echo
 #repo=SUSE:SLE-12-SP2:GA:Products:Update
 #package_name=slurm
 #from=OBS:network:cluster
@@ -24,6 +26,7 @@ find_target() {
     local package=$2
     local repo=$3
 
+    ${DEBUG} ${OSC_CMD} ls $dest >&2
     for i in $(${OSC_CMD} ls $dest)
 do
     if [[ $i =~ ^${package}\.${repo//:/_} ]]
@@ -71,6 +74,7 @@ esac
 if [ -z "$dest" ]
 then
     pattern="$IBSHOME:${match_dest/NUM/[[:digit:]]+}"
+    ${DEBUG} ${OSC_CMD} ls / >&2
     list=$(${OSC_CMD} ls / | grep -E "$pattern")
     if [ -n "$list" ]
     then
@@ -102,14 +106,17 @@ from=${from/#IBS:/}
 
 target=$(find_target $dest $package_name_mr $repo)
 
+${DEBUG} ${OSC_CMD} ls $from >&2
 ${OSC_CMD} ls $from &> /dev/null || \
     { echo "$from does not exist"; exit 1; }
+${DEBUG} ${OSC_CMD} ls $from $package_name >&2
 ${OSC_CMD} ls $from $package_name &> /dev/null || \
     { echo "$package_name does not exist in $from"; exit 1; }
 
 if [ -z "$target" ]
 then
-    ${OSC_CMD} branch -M -N $repo $package_name_mr $dest || \
+    ${DEBUG} ${OSC_CMD} branch -M -N $repo $package_name_mr $dest >&2
+${STRUT}    ${OSC_CMD} branch -M -N $repo $package_name_mr $dest || \
 	{ echo "branch failed"; exit 1; }
     ##${OSC_CMD} meta prj $dest -e
     target=$(find_target $dest $package_name_mr $repo)
@@ -120,7 +127,8 @@ fi
 
 #echo $dest $from $package_name_mr $target
 
-${OSC_CMD} copypac -e -K $from $package_name $dest $target || \
+${DEBUG} ${OSC_CMD} copypac -e -K $from $package_name $dest $target >&2
+${STRUT} ${OSC_CMD} copypac -e -K $from $package_name $dest $target || \
     { echo "copypac failed" ; exit 1; }
 
 echo -e "Check out project with:\n$OSC_CMD co $dest $target"
