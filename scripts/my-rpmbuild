@@ -167,7 +167,7 @@ exec_build () {
     else
 	if which localbuild.sh &> /dev/null
 	then
-	    command="rpmbuild $buildopt $target --nodeps $verboseopt --define \"_srcrpmdir $srcrpmdir\"\
+	    command="$sethome rpmbuild $buildopt $target --nodeps $verboseopt --define \"_srcrpmdir $srcrpmdir\"\
                     --define \"_build_create_debug 1\" \
                     --define \"_sourcedir $sourcedir\"\
                     --define \"_rpmdir $rpmdir\"\
@@ -403,6 +403,7 @@ then
 	esac
     fi
 else
+    sethome='HOME=/home/abuild'
     [ $localbuild -eq 1 ] && die "-l and -R options cannot be used together"
     [ -z "$arch" ] && arch=$(uname -m);
     case $arch in
