@@ -13,13 +13,18 @@ die () {
 }
 
 usage() {
-    echo "$(basename $0) [-s <SYSTEM>|-R <repo>] [-r] [-e <ENV>] [-l|-i|<command>]"
+    echo "$(basename $0) [-s <SYSTEM>|-R <repo>] [-P <prject>] [-r] [-e <ENV>] [-l|-i|<command>]"
     echo "Options:"
     echo -e "\t-s <SYSTEM> := openSUSE-<version> | SLE.."
     echo -e "\t  or set the BUILDENV environment variable"
     echo -e "\t-l: start interactive shell in local home directory."
     echo -e "\t-i: info only: print buildroot directory."
     echo -e "\t-R <repo>: use <repo> in osc build-root."
+    echo -e "\t-P <project>: specify <project> if project is required"
+    echo -e "\t              for build-root but cannot be determined"
+    echo -e "\t              because we are not inside an OBS package"
+    echo -e "\t              directory or a subdirectory"
+    echo -e "\t              (used in conjunction with -R <repo>)."
     echo -e "\t-r: run as user root."
     echo -e "\t-e <ENV>: add environment setting ENV to command. <ENV> must be of the form FOO=BAR."
     echo -e "\t<command>: run <command> in current directory but in build environment."
@@ -100,6 +105,7 @@ do
 		-r) do_root=1 ;;
 		-a) arch=$1; shift ;;
 		-R) repo=$1; shift ;;
+		-P) project=$1; shift ;;
 		*)   usage ;;
 	    esac
 	    ;;
@@ -126,7 +132,7 @@ done
 [ -n "$runcommand" -a "$infoonly" == "1" ] && die "-i (info only) makes no sense with a command to execute"
 
 [ -n "$repo" -a -n "$system" ] && die "Cannot specify -R and -s at the same time"
-
+[ -n "$project" -a -z "$repo" ] && echo "Warning! option -P ignored. Only used in conjuction with -R."
 # FIXME: make arch configurable
 if [ -z "$arch" ]; then
     case $(uname -m) in
@@ -201,15 +207,15 @@ else # $repo
     dir=${dir/\%\(repo\)s/$repo}
     dir=${dir/\%\(arch\)s/$arch}
     if [[ $dir =~ %\(project\)s ]]; then
-       project="$(d=$(pwd); \
-                      while true; \
-                        do osc info $d 2>/dev/null && break;\
-                        d=$(realpath $d/..); \
-                        [ "$d" != "/" ] || break; \
-                      done | sed -n 's/Project name: //p')"
-       [ -n "$project" ] || die "Cannot find project"
+       [ -n "$project" ] || project="$(d=$(pwd); \
+                       while true; \
+                    do osc info $d 2>/dev/null && break;\
+                            d=$(realpath $d/..); \
+                            [ "$d" != "/" ] || break; \
+                         done | sed -n 's/Project name: //p')"
+       [ -n "$project" ] || die "Cannot find project (use option -P to specify)"
+       dir=${dir/\%\(project\)s/$project}
     fi
-    dir=${dir/\%\(project\)s/$project}
     [ -n "$dir" ] || die "Cannot determine build-root"
     [ -d "$dir" ] || die "build-root $dir doesn't exist"
     [ -d $dir/etc ] || die "Repository $dir is bogus: /etc missing"
