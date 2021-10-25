@@ -27,6 +27,7 @@ usage() {
     echo -e "\t              (used in conjunction with -R <repo>)."
     echo -e "\t-r: run as user root."
     echo -e "\t-e <ENV>: add environment setting ENV to command. <ENV> must be of the form FOO=BAR."
+    echo -e "\t-c: cleanup only."
     echo -e "\t<command>: run <command> in current directory but in build environment."
     echo -e "If run without command, start interactive shell in current directory."
     echo -e "use BUILDEXTRADIRS to specify extra directories to include in build environment."
@@ -106,6 +107,7 @@ do
 		-a) arch=$1; shift ;;
 		-R) repo=$1; shift ;;
 		-P) project=$1; shift ;;
+		-c) cleanup=1 ;;
 		*)   usage ;;
 	    esac
 	    ;;
@@ -261,53 +263,55 @@ unset tmpfile mount_list rmdirs
 
 trap "wait; all_cleanup \"\$tmpfile\" \"\$mount_list\" \"\$rmdirs\"" EXIT
 
-if [ -z "$runcommand" ]
-then
-    if [ "$starthome" != "1" ]
+if [ "$cleanup" != "1" ]; then
+    if [ -z "$runcommand" ]
     then
-	tmpfile=$(mktemp "$dir/tmp/tmp-XXXXXXX")
-	cat > $tmpfile <<EOF
+	if [ "$starthome" != "1" ]
+	then
+	    tmpfile=$(mktemp "$dir/tmp/tmp-XXXXXXX")
+	    cat > $tmpfile <<EOF
 #!/bin/sh
 cd ${thisdir}
 /bin/bash -li
 EOF
-	chmod u+x $tmpfile
-	command="--command=\"/${tmpfile##$dir}\""
+	    chmod u+x $tmpfile
+	    command="--command=\"/${tmpfile##$dir}\""
+	else
+	    unset command
+	fi
     else
-	unset command
-    fi
-else
-    tmpfile=$(mktemp "$dir/tmp/tmp-XXXXXXX")
-    cat > $tmpfile <<EOF
+	tmpfile=$(mktemp "$dir/tmp/tmp-XXXXXXX")
+	cat > $tmpfile <<EOF
 #!/bin/sh
 cd \$1
 trap "test -n \"\\\$_PID\" && kill -15 \\\$_PID" EXIT
 set -x
 EOF
-    for (( i=0 ; $i - ${#env[@]} ; i++))
-    do
-	echo "export ${env[$i]}" >> $tmpfile
-    done
-    cat >> $tmpfile <<EOF
+	for (( i=0 ; $i - ${#env[@]} ; i++))
+	do
+	    echo "export ${env[$i]}" >> $tmpfile
+	done
+	cat >> $tmpfile <<EOF
 $runcommand &
 set +x
 _PID=\$!
 wait
 trap "" EXIT
 EOF
-    chmod u+x $tmpfile
-    command="--command=\"${tmpfile##$dir} ${thisdir}\""
-fi
+	chmod u+x $tmpfile
+	command="--command=\"${tmpfile##$dir} ${thisdir}\""
+    fi
 
 
-if [ "$do_root" = "0" ]
-then
-    [ -z "$homedir" ] && homedir=$(grep $USER $dir/etc/passwd | awk -F":" ' {print $6;}')
-    [ -z "$homedir" ] && die "Missing or wrong homedir $homedir"
-    [ ! -d $dir/$(dirname $homedir) ] && die "Missing or wrong homedir $homedir"
-    [ -n "$homedir" -a ! -d $dir/$homedir ] && sudo mkdir $dir/$homedir
-else
-    unset homedir
+    if [ "$do_root" = "0" ]
+    then
+	[ -z "$homedir" ] && homedir=$(grep $USER $dir/etc/passwd | awk -F":" ' {print $6;}')
+	[ -z "$homedir" ] && die "Missing or wrong homedir $homedir"
+	[ ! -d $dir/$(dirname $homedir) ] && die "Missing or wrong homedir $homedir"
+	[ -n "$homedir" -a ! -d $dir/$homedir ] && sudo mkdir $dir/$homedir
+    else
+	unset homedir
+    fi
 fi
 
 for i in $homedir /proc /sys /dev /dev/shm $EXTRADIRS
@@ -317,9 +321,13 @@ do
     entry=$(mount | cut -d' ' -f 3 | grep $this\$)
     if [ -z "$entry" ]
     then
-	[ -d $this ] || sudo mkdir -p $this
-	echo "mounting $this"
-	sudo mount -obind /$i $this && mount_list="$this $mount_list"
+	if [ "$cleanup" != "1" ]; then
+	    [ -d $this ] || sudo mkdir -p $this
+	    echo "mounting $this"
+	    sudo mount -obind /$i $this  && mount_list="$this $mount_list"
+	else
+	    mount_list="$this $mount_list"
+	fi
     fi
 done
 
@@ -340,12 +348,18 @@ then
 	ls $dir$last
 	if [ -n "$last" -a ! -d $dir$last ]
 	then
-	    sudo mkdir $dir/$last && rmdirs="$dir/$last $rmdirs"
-	    echo "mounting $last"
-	    sudo mount -o bind $last $dir/$last && mount_list="$dir/$last $mount_list"
+	    if [ "$cleanup" != "1" ]; then
+		sudo mkdir $dir/$last && rmdirs="$dir/$last $rmdirs"
+		echo "mounting $last"
+		sudo mount -o bind $last $dir/$last && mount_list="$dir/$last $mount_list"
+	    else
+		mount_list="$dir/$last $mount_list"
+	    fi
 	fi
     fi
 fi
+
+[ "$cleanup" = "1" ] && exit 0
 
 [ -z "$homedir" ] && { homedir=root; USER=root; }
 sudo sh -c "HOME=$homedir chroot $dir su - $USER $command"
