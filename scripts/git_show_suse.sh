@@ -40,6 +40,8 @@ Options:
      line in the patch preamble will be left empty.
   -d <directory>: output to directory <directory> instead of the current one.
   -v verbose: print list of files.
+  -x do not strip off leading path element from rpm-git generated directory when
+     multiple subdirectories are found.
   <range> a range of patches. This can either be a single commit or a range of 
      commits like HEAD^^..HEAD. Default is HEAD^..HEAD.
 EOF
@@ -364,6 +366,9 @@ do
 	-v)
 	    verbose=1
 	    ;;
+	-x)
+	    no_relative_for_multiple=1
+	    ;;
 	-*)
 	    die "Wrong option $cmd"
 	    ;;
@@ -414,10 +419,10 @@ then
 
 	if [ "z${relative}" != "z" ]
 	then
-	    unset relative
+	    [ -n "$no_relative_for_multiple" ] && unset relative
 	    break;
 	else
-	    relative=${i##*/}
+	    relative=1
 	fi
     done
 fi
@@ -476,10 +481,23 @@ do
 	signedoff=
 	filter="suse_filter "'"'$myid'"'
     fi
+    if [ $relative -eq 1 ]; then
+	for f in $(git show --format=oneline --name-only $i | tail -n +2); do
+	    g=${f%%/*}/
+	    if [ -z "$rel" ]; then
+		rel=$g
+	    else
+		if [ "$rel" != "$g" ]; then
+		    unset $rel
+		    break
+		fi
+	    fi
+	done
+    fi
 #    [ -n "$git_repo_tag" ] && \
     is_upstream_repo "$(get_git_repo)" $NON_UPSTREAM_SIGNATURES && \
 	commit_id="Git-commit: %H%n"
-    command="git --no-pager show  ${relative:+--relative=}${relative} --stat -p $i --pretty=format:\"From: %an <%ae>%nDate: %ad%nSubject: ${subjprefix}%s${mainline:+%nPatch-mainline: }${mainline}%n${git_repo_tag}${commit_id}References: ${references}%n${signedoff}%n%b\""
+    command="git --no-pager show  ${rel:+--relative=}${rel} --stat -p $i --pretty=format:\"From: %an <%ae>%nDate: %ad%nSubject: ${subjprefix}%s${mainline:+%nPatch-mainline: }${mainline}%n${git_repo_tag}${commit_id}References: ${references}%n${signedoff}%n%b\""
     if [ -n "$filename" ]
     then
 	eval ${command} | eval ${filter} > ${directory:+$directory/}$filename
