@@ -529,3 +529,21 @@ a given repository, arch and optionally flavor.
 ls-bin -M flavor repository arch
 
 Requires: grep, sed
+
+uppatch.sh
+----------
+
+Utility to apply a set of patches to a git-ed source tree.
+When needing to apply a set of 'git show' style patches, git am may
+often not do the job as it is not tolerant to whitespace changes.
+This script retries by using 'patch' in case 'git am' fails.
+
+uppatch.sh [-h|-?|--help|filelist...]
+Options:
+   -h|-?|--help: Usage
+Either specify filelist or set environment variable "PATCHSET"
+
+In an OBS package directory, after running rpm-git, apply a set of
+patches (git show style).
+
+Requires: git, patch, coreutils
