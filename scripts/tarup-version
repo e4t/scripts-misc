@@ -2,7 +2,13 @@
 #set -x
 get_version() {
     local sha1=$1 version
-    version=$(git describe $sha1 2>/dev/null) || return 1
+    local anytag=$2
+    if $anytag; then
+	anytag=--tags
+    else
+	unset anytag
+    fi
+    version=$(git describe $anytag $sha1 2>/dev/null) || return 1
     echo $version | sed -e "s/-/./g" -e  "s/-/_/g"
 }
 
@@ -21,8 +27,9 @@ create_archive() {
 }
 
 usage() {
-    echo "$(basename $0) [-v][-c <compression>][-r <sha1>][-p package] targetdir"
+    echo "$(basename $0) [-a][-v][-c <compression>][-r <sha1>][-p package] targetdir"
     echo "Options:"
+    echo -e "\t-a: use any tag, not just annotated ones"
     echo -e "\t-v: verbose - print package & version"
     echo -e "\t-c <compression> set archive compression. Default: bz2"
     echo -e "\t-r <sha1> set version id. Default: HEAD"
@@ -41,6 +48,7 @@ die() {
 compression=bz2
 sha1=HEAD
 verbose=false
+anytag=false
 
 while [ -n "$1" ]
 do
@@ -50,6 +58,7 @@ do
 	-r) shift; sha1=$1; shift ;;
 	-p) shift; package=$1; shift ;;
 	-V) shift; version=$1; shift ;;
+	-a) shift; anytag=true ;;
 	-*) usage; exit 0;;
 	*)
 	    if [ -z "$target" ]
@@ -63,7 +72,7 @@ do
 done
 [ -z "$package" ] && package=$(basename $(git rev-parse --show-toplevel)) || die "Not git repo"
 [ -z "$target" ] && { usage; exit 1; }
-[ -z "$version" ] && { version=$(get_version $sha1) || die "sha1 $sha1 doesn't exist"; }
+[ -z "$version" ] && { version=$(get_version $sha1 $anytag) || die "sha1 $sha1 doesn't exist"; }
 create_archive $package $version $sha1 $target $compression || die "Cannot create archive"
 
 $verbose && echo $package-$version
