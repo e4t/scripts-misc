@@ -257,7 +257,7 @@ echo "API: $api"
 echo "TARGET: ${target}${post} REPOSITORY: $repository"
 
 command="/usr/bin/osc -A $api build --alternative-project=${target}${post} \
-     --local-package --no-verify --nochecks  --build-uid=caller \
+     --local-package --no-verify --nochecks --noservice --build-uid=caller \
     $repository $oscarch $spec" # || die "osc build failed $?"
 echo "${command}"
 ${command}
