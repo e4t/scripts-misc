@@ -177,15 +177,15 @@ then
     esac
 fi
 
-if [ -z "$repository" ]
-then
-    repository="standard"
-fi
-
 case $arch in
     i386) oscarch=i586 ;;
     *) oscarch=$arch;
 esac
+
+if [ -z "$repository" ]
+then
+    repository="standard"
+fi
 
 spec=$name.spec
 
@@ -203,6 +203,8 @@ fi
 if [ -n "$directory" ]
 then
     dir=${directory}
+    [[ $dir =~ .*-$arch ]] || \
+	{ echo "$dir has no ARCH appended - fixing!"; dir=$dir-$arch; }
 else
     dir=${name}${middle}-$arch
 fi
