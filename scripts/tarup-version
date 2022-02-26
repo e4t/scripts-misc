@@ -9,7 +9,7 @@ get_version() {
 	unset anytag
     fi
     version=$(git describe $anytag $sha1 2>/dev/null) || return 1
-    echo $version | sed -e "s/-/./g" -e  "s/-/_/g"
+    echo $version | sed -e "s/-/./g" -e  "s/-/_/g" -e "s/^v//"
 }
 
 create_archive() {
