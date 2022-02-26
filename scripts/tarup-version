@@ -75,6 +75,6 @@ done
 [ -z "$version" ] && { version=$(get_version $sha1 $anytag) || die "sha1 $sha1 doesn't exist"; }
 create_archive $package $version $sha1 $target $compression || die "Cannot create archive"
 
-$verbose && echo $package-$version
+$verbose && echo $package-$version.tar.$compression
 
 exit 0
