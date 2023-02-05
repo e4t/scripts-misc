@@ -325,9 +325,9 @@ do
 	    [ -d $this ] || sudo mkdir -p $this
 	    echo "mounting $this"
 	    sudo mount -obind /$i $this  && mount_list="$this $mount_list"
-	else
-	    mount_list="$this $mount_list"
 	fi
+    else
+	mount_list="$this $mount_list"
     fi
 done
 
