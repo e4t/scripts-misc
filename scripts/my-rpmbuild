@@ -154,7 +154,7 @@ exec_build () {
     fi
     if [ -z "$buildenv" -a -z "$repo" ]
     then
-	rpmbuild $buildopt $target --nodeps $verboseopt --define "_srcrpmdir $srcrpmdir" \
+	rpmbuild $buildopt $target --noclean --nodeps $verboseopt --define "_srcrpmdir $srcrpmdir" \
 	    --define "_build_create_debug 1" \
 	    --define "_sourcedir $sourcedir" --define "_rpmdir $rpmdir" \
 	    --define "_target ${arch}_linux" --define "_target_cpu ${arch}" \
@@ -167,7 +167,7 @@ exec_build () {
     else
 	if which localbuild.sh &> /dev/null
 	then
-	    command="$sethome rpmbuild $buildopt $target --nodeps $verboseopt --define \"_srcrpmdir $srcrpmdir\"\
+	    command="$sethome rpmbuild $buildopt $target --noclean --nodeps $verboseopt --define \"_srcrpmdir $srcrpmdir\"\
                     --define \"_build_create_debug 1\" \
                     --define \"_sourcedir $sourcedir\"\
                     --define \"_rpmdir $rpmdir\"\
