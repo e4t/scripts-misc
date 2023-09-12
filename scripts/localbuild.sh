@@ -272,10 +272,25 @@ if [ "$cleanup" != "1" ]; then
 	    cat > $tmpfile <<EOF
 #!/bin/sh
 cd ${thisdir}
+EOF
+	    [ -n "$(find $thisdir -maxdepth 1 -name "*.spec" -print -quit)" ] &&
+		{ cat >> $tmpfile <<EOF
+RPMARGS="--define@_sourcedir $thisdir@\
+--define@_rpmdir $thisdir/.RPMS@\
+--define@_builddir $thisdir/.BULD@\
+--define@_buildrootdir $thisdir/.BUILDROOT@\
+--define@_topdir $thisdir@\
+--define@_target ${arch}_linux@\
+--define@_target_cpu ${arch}"
+export RPMARGS
+EOF
+		  true ; }
+	    cat >> $tmpfile <<EOF
 /bin/bash -li
 EOF
 	    chmod u+x $tmpfile
-	    command="--command=\"/${tmpfile##$dir}\""
+	    #@#	    command="--command=\"/${tmpfile##$dir}\""
+	    command="/${tmpfile##$dir}"
 	else
 	    unset command
 	fi
@@ -299,7 +314,8 @@ wait
 trap "" EXIT
 EOF
 	chmod u+x $tmpfile
-	command="--command=\"${tmpfile##$dir} ${thisdir}\""
+	#@#	command="--command=\"${tmpfile##$dir} ${thisdir}\""
+	command="${tmpfile##$dir} ${thisdir}"
     fi
 
 
@@ -362,7 +378,9 @@ fi
 [ "$cleanup" = "1" ] && exit 0
 
 [ -z "$homedir" ] && { homedir=root; USER=root; }
-sudo sh -c "HOME=$homedir chroot $dir su - $USER $command"
+#@#sudo sh -c "HOME=$homedir chroot $dir su - $USER $command"
+GROUP=$(id -ng $USER)
+sudo sh -c "HOME=$homedir chroot --userspec=$USER:$GROUP $dir $command"
 
 ret=$?
     if [ $ret -ne 0 -a -n "$tmpfile" ]
