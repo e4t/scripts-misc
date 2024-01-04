@@ -40,6 +40,7 @@ Options:
      line in the patch preamble will be left empty.
   -d <directory>: output to directory <directory> instead of the current one.
   -v verbose: print list of files.
+  -V same as verbose but print list of files in reverse order.
   -x do not strip off leading path element from rpm-git generated directory when
      multiple subdirectories are found.
   <range> a range of patches. This can either be a single commit or a range of 
@@ -366,6 +367,9 @@ do
 	-v)
 	    verbose=1
 	    ;;
+	-V) verbose=1
+	    reverse=1
+	    ;;
 	-x)
 	    no_relative_for_multiple=1
 	    ;;
@@ -504,7 +508,12 @@ do
 	eval ${command} | eval ${filter} > ${directory:+$directory/}$filename
 	if [ "x$verbose" = "x1" ]
 	then
-	    printlist="${filename}\n${printlist}"
+	    if [ "x$reverse" = "x1" ]
+	    then
+		printlistR="${printlistR}\n${filename}"
+	    else
+		printlist="${filename}\n${printlist}"
+	    fi
 	fi
     else
 	eval ${command} | eval ${filter}
@@ -512,5 +521,6 @@ do
     cnt=$(( $cnt + 1 ))
 done
 [ -n "$printlist" ] && echo -en "${printlist}"
+[ -n "$printlistR" ] && echo -e "${printlistR}"
 
 #		git --no-pager show --stat -p $i --pretty=format:"From: %an <%ae>%nDate: %ad%nSubject: %s%nReferences: ${references}%nPatch-Mainline: ${mainline}%nGit-commit: %H%n${git_repo_tag}%n%nSigned-off-by: $myid%n%n%b" >${directory:+$directory/}$filename
