@@ -5,6 +5,7 @@ DELIMITER=_
 optlist=
 optlist_tail=
 project=
+message=
 checkout=0
 add_dir=0
 
@@ -72,7 +73,7 @@ then
 		;;
 	    -m)
 		shift
-		optlist_tail=$"$optlist_tail \"$1\""
+		message=$1
 		shift
 		;;
 	    -*)
@@ -98,7 +99,20 @@ then
 	esac
     done
 else
-    optlist="$optlist $@" 
+    while [ -n "$1" ]
+    do
+	case $1 in
+	    -m)
+		shift
+		message=$1
+		shift
+		;;
+	    *)
+		optlist="$optlist $1"
+		shift
+		;;
+	esac
+    done
 fi
 
 if [ -n "$project" -a -z "$package" ] && \
@@ -119,7 +133,7 @@ fi
 #fi
 
 optlist="$optlist $add_arg $optlist_tail"
-echo $optlist
+echo $optlist ${message:+-m "\"$message"\"}
 
 restore () {
     local unpacktmp project
@@ -130,7 +144,7 @@ restore () {
 
 if [ $add_dir -ne 1 ]
 then
-    exec /usr/bin/osc $optlist
+    exec /usr/bin/osc $optlist ${message:+-m "\"$message\""}
 else
     dir=${project//:/$DELIMITER}  # ${package:+/}$package
     # Move $project out of the way if it exists
