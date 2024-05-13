@@ -40,6 +40,7 @@ Options:
      line in the patch preamble will be left empty.
   -d <directory>: output to directory <directory> instead of the current one.
   -v verbose: print list of files.
+  -U <n> use n lines of context in diff.
   -V same as verbose but print list of files in reverse order.
   -x do not strip off leading path element from rpm-git generated directory when
      multiple subdirectories are found.
@@ -364,6 +365,9 @@ do
 	    directory="$1"
 	    shift
 	    ;;
+	-U) context="$1"
+	    shift
+	    ;;
 	-v)
 	    verbose=1
 	    ;;
@@ -502,7 +506,7 @@ do
 #    [ -n "$git_repo_tag" ] && \
     is_upstream_repo "$(get_git_repo)" $NON_UPSTREAM_SIGNATURES && \
 	commit_id="Git-commit: %H%n"
-    command="git --no-pager show  ${rel:+--relative=}${rel} --stat -p $i --pretty=format:\"From: %an <%ae>%nDate: %ad%nSubject: ${subjprefix}%s${mainline:+%nPatch-mainline: }${mainline}%n${git_repo_tag}${commit_id}References: ${references}%n${signedoff}%n%b\""
+    command="git --no-pager show  ${rel:+--relative=}${rel} ${context:+--unified=${context}} --stat -p $i --pretty=format:\"From: %an <%ae>%nDate: %ad%nSubject: ${subjprefix}%s${mainline:+%nPatch-mainline: }${mainline}%n${git_repo_tag}${commit_id}References: ${references}%n${signedoff}%n%b\""
     if [ -n "$filename" ]
     then
 	eval ${command} | eval ${filter} > ${directory:+$directory/}$filename
