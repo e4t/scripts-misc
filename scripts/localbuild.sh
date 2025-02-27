@@ -342,7 +342,7 @@ do
 	    echo "mounting $this"
 	    sudo mount -obind /$i $this  && mount_list="$this $mount_list"
 	fi
-    else
+    elif [ "$cleanup" = "1" ]; then
 	mount_list="$this $mount_list"
     fi
 done
@@ -361,14 +361,17 @@ then
 		break;
 	    fi
 	done
-	ls $dir$last
-	if [ -n "$last" -a ! -d $dir$last ]
+	ls $dir/$last
+	if [ -n "$last" ]
 	then
-	    if [ "$cleanup" != "1" ]; then
-		sudo mkdir $dir/$last && rmdirs="$dir/$last $rmdirs"
-		echo "mounting $last"
-		sudo mount -o bind $last $dir/$last && mount_list="$dir/$last $mount_list"
-	    else
+	    entry=$(mount | cut -d' ' -f 3 | grep $dir/$last\$)
+	    if [ -z $entry ]; then
+		if [ "$cleanup" != "1" ]; then
+		    [ ! -d $dir/$last ] && sudo mkdir $dir/$last && rmdirs="$dir/$last $rmdirs"
+		    echo "mounting $last"
+		    sudo mount -o bind $last $dir/$last && mount_list="$dir/$last $mount_list"
+		fi
+	    elif [ "$cleanup" = "1" ]; then
 		mount_list="$dir/$last $mount_list"
 	    fi
 	fi
