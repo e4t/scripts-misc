@@ -6,12 +6,13 @@ die () {
 }
 
 usage () {
-    echo -e "$(basename $0) [-f <fuzz>] [-F <flavor>] [-t] [specfile]\n"
+    echo -e "$(basename $0) [-f <fuzz>] [-F <flavor>] [-t] [--with|--without <property>] [specfile]\n"
     echo "Options:"
     echo "   -f <fuzz>: specify maximum fuzz level. default: 0."
     echo "   -F <flavor>: specify flavor for multibuild spec file (default: standard)"
     echo "   -t: test mode, will not create a src/ directory."
     echo "   -a <arch>: specify architecture if not the same as host."
+    echo "   --with|without <property>: pass properties to rpmbuild. May be used multiple times."
 }
 
 save_cmdline ()  # <dir_to_put_file> <env> <command_to_save> <command_args> <sudo_or_empty>
@@ -65,6 +66,7 @@ fi
 unset arch
 
 flavor=     #standard
+w_args=""
 
 while [ -n "$1" ]
 do
@@ -74,6 +76,7 @@ do
         -t) test=1; shift;;
 	-a) arch=$2; shift; shift;;
 	--target) target="$1 $2"; shift; shift;;
+	--with|--without) w_args+="$1 $2"; shift; shift;;
 	-*) usage; die ;;
 	*) specfile="$1"; shift;;
     esac
@@ -221,7 +224,7 @@ cleanup_all() {
 if [ -z "$myroot" ]
 then
     trap "cleanup_all \"\$tmpspec\" \"\$tmpscript\" \"\$tmpd\"" EXIT    
-    /usr/bin/rpmbuild  -bp $target \
+    /usr/bin/rpmbuild  ${w_args} -bp $target \
 	--define "_default_patch_fuzz $fuzz" --define "_sourcedir $mydir" \
 	--define "_target ${arch}_linux" --define "_target_cpu ${arch}" \
 	--define "_builddir $mydir/$srcdir" --define "_topdir $mydir" \
@@ -237,7 +240,7 @@ else
     mount_proc "$myroot"
     thisdir=$(pwd)
     tmpscript=$(mktemp $myroot/tmp/rpm_execXXXXX)
-    echo -e "#!/bin/sh\ncd $thisdir; /usr/bin/rpmbuild  -bp $target \
+    echo -e "#!/bin/sh\ncd $thisdir; /usr/bin/rpmbuild ${w_args} -bp $target \
 	--define \"_default_patch_fuzz $fuzz\" --define \"_sourcedir $mydir\" \
 	--define \"_target ${arch}_linux\" --define \"_target_cpu ${arch}\" \
 	--define \"_builddir $mydir/$srcdir\" --define \"_topdir $mydir\" \
