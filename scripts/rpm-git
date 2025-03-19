@@ -1,4 +1,4 @@
-#! /bin/sh
+#! /bin/bash
 # set -x
 die () {
     echo $1 >&2
@@ -12,6 +12,7 @@ usage () {
     echo "   -F <flavor>: specify flavor for multibuild spec file (default: standard)"
     echo "   -t: test mode, will not create a src/ directory."
     echo "   -a <arch>: specify architecture if not the same as host."
+    echo "   -D foo=bar: pass a define of a marco \'foo\' to the specfile."
     echo "   --with|without <property>: pass properties to rpmbuild. May be used multiple times."
 }
 
@@ -102,6 +103,8 @@ do
 	-a) arch=$2; shift; shift;;
 	--target) target="$1 $2"; shift; shift;;
 	--with|--without) w_args+="$1 $2"; shift; shift;;
+	-D) [[ $2 =~ = ]] || { echo "Option -D requires argument of the form \'a=b\'"; exit 1; }
+	    defines[${2%%=*}]=${2#*=}; shift; shift;;
 	-*) usage; die ;;
 	*) specfile="$1"; shift;;
     esac
@@ -171,10 +174,13 @@ then
     sleep 5;
 fi
 
-if grep -q "^Release:.*\.<RELEASE.*>" $specfile || grep -q "@BUILD_FLAVOR@" $specfile
+if test ${#defines[@]} -gt 0 || grep -q "^Release:.*\.<RELEASE.*>" $specfile || grep -q "@BUILD_FLAVOR@" $specfile
 then
     tmpspec=$(mktemp $myroot/tmp/tmp-XXXXXX)
-    sed -e "s%<RELEASE\(.*\)>%\\1%" -e "s%@BUILD_FLAVOR@%${flavor}%g" < $specfile > $tmpspec
+    for i in ${!defines[*]}; do
+	echo "%define ${i} ${defines[$i]}" >> $tmpspec
+    done
+    sed -e "s%<RELEASE\(.*\)>%\\1%" -e "s%@BUILD_FLAVOR@%${flavor}%g" < $specfile >> $tmpspec
     specfile="${tmpspec##$myroot}"
 fi
 
