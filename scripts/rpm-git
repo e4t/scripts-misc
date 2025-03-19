@@ -41,6 +41,31 @@ save_cmdline ()  # <dir_to_put_file> <env> <command_to_save> <command_args> <sud
     fi
 }
 
+cleanup_tars() {
+    local dir=$1
+    local list=.tarlist_from_cpio
+    local i
+    [ -e $list ] || return
+    for i in $(cat $list); do rm -f $i; done
+    rm -f $list
+}
+
+create_tar_from_obscpio() {
+    local dir=$1
+    local list=$dir/.tarlist_from_cpio
+    local i
+    [ -e  $list ] && cleanup_tars $dir
+    for i in $(find . -maxdepth 1 -name "*.obscpio"); do
+	cpio_a=$i
+	tar_a=${cpio_a/%.obscpio/.tar}
+	tmp_d=$(mktemp -d $dir/.cpiotmp-XXXXXXX)
+	( cd $tmp_d && cpio -idm < $dir/$cpio_a && tar -cf $dir/$tar_a . )
+	rm -rf $tmp_d
+	echo $tar_a >> $list
+    done
+}
+
+declare -A defines
 env=""
 cmd=$0
 cmdargs="${1+\"$@\"}"
@@ -153,6 +178,8 @@ then
     specfile="${tmpspec##$myroot}"
 fi
 
+create_tar_from_obscpio $mydir
+
 #if [ -n "$myroot" ]
 #then
 #    rcfile=$(mktemp /tmp/rpmrc.XXXXX)
@@ -216,14 +243,16 @@ cleanup_all() {
     local tmpspec="$1"
     local tmpscript="$2"
     local tmpd="$3"
+    local dir=$4
     [ -n "$tmpspec" ] && rm -rf $tmpspec
     [ -n "tmpscript" ] && rm -rf $tmpscript
     [ -n "$tmpd" ] && rm -rf $tmpd
+    cleanup_tars $dir
 }
 
 if [ -z "$myroot" ]
 then
-    trap "cleanup_all \"\$tmpspec\" \"\$tmpscript\" \"\$tmpd\"" EXIT    
+    trap "cleanup_all \"\$tmpspec\" \"\$tmpscript\" \"\$tmpd\" \"\$mydir\"" EXIT    
     /usr/bin/rpmbuild  ${w_args} -bp $target \
 	--define "_default_patch_fuzz $fuzz" --define "_sourcedir $mydir" \
 	--define "_target ${arch}_linux" --define "_target_cpu ${arch}" \
@@ -235,7 +264,7 @@ then
 	--nodeps $specfile
     exitcode=$?
 else
-    trap "cleanup_all \"\$tmpspec\" \"\$tmpscript\" \"\$tmpd\"; teardown_all \"\$mount_list\" \"\$rmdirs\"" EXIT
+    trap "cleanup_all \"\$tmpspec\" \"\$tmpscript\" \"\$tmpd\" \"\$mydir\"; teardown_all \"\$mount_list\" \"\$rmdirs\"" EXIT
     mount_pwd "$myroot"
     mount_proc "$myroot"
     thisdir=$(pwd)
@@ -253,14 +282,14 @@ else
     sudo sh -c "HOME=$homedir chroot $myroot su - $USER ${tmpscript##$myroot}"
     exitcode=$?
     teardown_all "$mount_list" "$rmdirs"
-    trap "cleanup_all \"\$tmpspec\" \"\$tmpscript\" \"\$tmpd\"" EXIT    
+    trap "cleanup_all \"\$tmpspec\" \"\$tmpscript\" \"\$tmpd\" \"\$mydir\"" EXIT    
 fi
 #$myroot/usr/bin/rpmbuild  -v --showrc ${myroot:+--root $myroot} -bp \
 #   --define "_default_patch_fuzz $fuzz" --define "_sourcedir $mydir" \
 #   --define "_builddir $mydir/$srcdir" --define "_topdir $mydir" --nodeps $specfile
 
 
-cleanup_all "$tmpspec" "$tmpscript" "tmpd"
+cleanup_all "$tmpspec" "$tmpscript" "$tmpd" "$mydir"
 trap "" EXIT
 [ -n "$tmpd" ] && exit $exitcode
 
